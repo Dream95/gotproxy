@@ -1,6 +1,3 @@
 [submodule "libbpf"]
 	path = libbpf
 	url = https://github.com/libbpf/libbpf.git
-[submodule "vmliunx.h"]
-	path = vmliunx.h
-	url = https://github.com/libbpf/vmlinux.h.git
