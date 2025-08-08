@@ -156,6 +156,8 @@ func main() {
 		ProxyPort: PROXY_PORT,
 		ProxyPid:  uint64(os.Getpid()),
 	}
+	stringToInt8Array(config.Command[:], "curl")
+
 	err = objs.proxyMaps.MapConfig.Update(&key, &config, ebpf.UpdateAny)
 	if err != nil {
 		log.Fatalf("Failed to update proxyMaps map: %v", err)
@@ -170,5 +172,20 @@ func main() {
 		}
 
 		go handleConnection(conn)
+	}
+}
+
+func stringToInt8Array(dst []int8, src string) {
+	for i := range dst {
+		dst[i] = 0
+	}
+
+	srcBytes := []byte(src)
+	copyLen := len(srcBytes)
+	if copyLen >= len(dst) {
+		copyLen = len(dst) - 1
+	}
+	for i := 0; i < copyLen; i++ {
+		dst[i] = int8(srcBytes[i])
 	}
 }

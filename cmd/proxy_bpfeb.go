@@ -18,6 +18,7 @@ type proxyConfig struct {
 	ProxyPort uint16
 	_         [6]byte
 	ProxyPid  uint64
+	Command   [16]int8
 }
 
 type proxySocket struct {

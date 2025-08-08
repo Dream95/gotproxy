@@ -12,6 +12,8 @@
 struct Config {
   __u16 proxy_port;
   __u64 proxy_pid;
+
+  char command[TASK_COMM_LEN];
 };
 
 struct Socket {
@@ -59,6 +61,12 @@ int cg_connect4(struct bpf_sock_addr *ctx) {
   struct Config *conf = bpf_map_lookup_elem(&map_config, &key);
   if (!conf) return 1;
   if ((bpf_get_current_pid_tgid() >> 32) == conf->proxy_pid) return 1;
+
+  if (conf->command[0] != '\0') {
+    char comm[TASK_COMM_LEN];
+    bpf_get_current_comm(comm, sizeof(comm));
+    if (__builtin_memcmp(comm, conf->command, TASK_COMM_LEN) != 0) return 1;
+  }
 
   // This field contains the IPv4 address passed to the connect() syscall
   // a.k.a. connect to this socket destination address and port
