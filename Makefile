@@ -16,3 +16,8 @@ clean:
 	go clean
 	rm -f $(BINARY_NAME)
 	@echo "Clean complete."
+
+.PHONY: build-bpf
+build-bpf: $(LIBBPF_OBJ) $(wildcard cmd/*.[ch]) | $(OUTPUT)
+	TARGET=amd64 go generate ./cmd/
+	TARGET=arm64 go generate ./cmd/
