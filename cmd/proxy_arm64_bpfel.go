@@ -73,9 +73,10 @@ type proxySpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type proxyProgramSpecs struct {
-	CgConnect4 *ebpf.ProgramSpec `ebpf:"cg_connect4"`
-	CgSockOps  *ebpf.ProgramSpec `ebpf:"cg_sock_ops"`
-	CgSockOpt  *ebpf.ProgramSpec `ebpf:"cg_sock_opt"`
+	CgConnect4  *ebpf.ProgramSpec `ebpf:"cg_connect4"`
+	CgSockOps   *ebpf.ProgramSpec `ebpf:"cg_sock_ops"`
+	CgSockOpt   *ebpf.ProgramSpec `ebpf:"cg_sock_opt"`
+	TcpSetState *ebpf.ProgramSpec `ebpf:"tcp_set_state"`
 }
 
 // proxyMapSpecs contains maps before they are loaded into the kernel.
@@ -136,9 +137,10 @@ type proxyVariables struct {
 //
 // It can be passed to loadProxyObjects or ebpf.CollectionSpec.LoadAndAssign.
 type proxyPrograms struct {
-	CgConnect4 *ebpf.Program `ebpf:"cg_connect4"`
-	CgSockOps  *ebpf.Program `ebpf:"cg_sock_ops"`
-	CgSockOpt  *ebpf.Program `ebpf:"cg_sock_opt"`
+	CgConnect4  *ebpf.Program `ebpf:"cg_connect4"`
+	CgSockOps   *ebpf.Program `ebpf:"cg_sock_ops"`
+	CgSockOpt   *ebpf.Program `ebpf:"cg_sock_opt"`
+	TcpSetState *ebpf.Program `ebpf:"tcp_set_state"`
 }
 
 func (p *proxyPrograms) Close() error {
@@ -146,6 +148,7 @@ func (p *proxyPrograms) Close() error {
 		p.CgConnect4,
 		p.CgSockOps,
 		p.CgSockOpt,
+		p.TcpSetState,
 	)
 }
 

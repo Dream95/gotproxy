@@ -6,7 +6,6 @@
 #include <bpf/bpf_core_read.h> 
 #include <bpf/bpf_endian.h>
 
-
 #define MAX_CONNECTIONS 20000
 
 struct Config {
@@ -87,7 +86,7 @@ int cg_connect4(struct bpf_sock_addr *ctx) {
   ctx->user_ip4 = bpf_htonl(0x7f000001); // 127.0.0.1 == proxy IP
   ctx->user_port = bpf_htonl(conf->proxy_port << 16); // Proxy port
 
-  bpf_printk("Redirecting client connection to proxy\n");
+  // bpf_printk("Redirecting client connection to proxy\n");
 
   return 1;
 }
@@ -156,7 +155,26 @@ int cg_sock_opt(struct bpf_sockopt *ctx) {
   return 1;
 }
 
+SEC("kprobe/tcp_set_state")
+int tcp_set_state(struct pt_regs *ctx)
+{
+  struct sock *sk = (struct sock *)PT_REGS_PARM1(ctx);
+  int state = (int)PT_REGS_PARM2(ctx);
 
+  if (state == TCP_CLOSE)
+  {
+    __u16 src_port = BPF_CORE_READ(sk, __sk_common.skc_num);
+    __u64 *cookie = bpf_map_lookup_elem(&map_ports, &src_port);
+    if (cookie)
+    {
+      // bpf_printk("tcp close\n");
+      bpf_map_delete_elem(&map_ports, &src_port);
+      bpf_map_delete_elem(&map_socks, &cookie);
+    }
+  }
+
+  return 0;
+}
 
 char __LICENSE[] SEC("license") = "GPL";
 
