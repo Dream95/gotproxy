@@ -14,8 +14,8 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "goproxy",
-	Short: "A simple tproxy tool for Linux",
+	Use:   "gotproxy",
+	Short: "A simple tcp transparent proxy tool for Linux",
 }
 
 func Execute() {
@@ -35,7 +35,7 @@ func main() {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&command, "comm", "", "The command to proxy")
-	rootCmd.PersistentFlags().Uint16Var(&proxyPort, "port", 18000, "The proxy port")
-	rootCmd.PersistentFlags().Uint64Var(&proxyPid, "pid", 0, "The proxy pid")
+	rootCmd.PersistentFlags().StringVar(&command, "cmd", "", "The command to be proxied. If not provided, all traffic will be proxied globally.")
+	rootCmd.PersistentFlags().Uint16Var(&proxyPort, "p-port", 18000, "The proxy port")
+	rootCmd.PersistentFlags().Uint64Var(&proxyPid, "p-pid", 0, "The process ID of the proxy. If not provided, the program will automatically start a forwarding proxy.")
 }
