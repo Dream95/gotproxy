@@ -27,10 +27,13 @@ func Execute() {
 
 func main() {
 	Execute()
-	StartProxy(&Options{
-		ProxyPort: proxyPort,
-		ProxyPid:  proxyPid,
+	if proxyPid == 0 {
+		StartProxy(proxyPort)
+	}
+	LoadBpf(&Options{
 		Command:   command,
+		ProxyPid:  proxyPid,
+		ProxyPort: proxyPort,
 	})
 }
 
