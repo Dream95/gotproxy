@@ -1,0 +1,32 @@
+name: Build
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.24.4'
+
+    - name: Init
+      run: /bin/bash init_env.sh
+
+    - name: Submodule
+      run: git submodule update --init --recursive
+    
+    - name: Build
+      run: make clean && make build-bpf && make
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-artifact 
+        path: ./gotproxy  

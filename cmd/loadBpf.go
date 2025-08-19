@@ -9,7 +9,7 @@ import (
 	"github.com/cilium/ebpf/rlimit"
 )
 
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cflags "-D ARCH_$TARGET" -target $TARGET  -type Config proxy proxy.c -- -I../libbpf/include/uapi -I../vmlinux/$TARGET
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cflags "-D ARCH_$TARGET" -target $TARGET  -type Config proxy proxy.c -- -I../.output/ -I../libbpf/include/uapi -I../vmlinux/$TARGET
 
 const (
 	CGROUP_PATH     = "/sys/fs/cgroup" // Root cgroup path
