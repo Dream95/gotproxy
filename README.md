@@ -11,6 +11,7 @@ A simple transparent proxy for Linux that routes network traffic based on the sp
     git clone https://github.com/Dream95/gotproxy.git
     cd gotproxy
     git submodule update --init --recursive
+    ./init_env.sh
     ```
 2.  Build from source:
     ```bash
