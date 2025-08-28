@@ -14,11 +14,13 @@ import (
 )
 
 type proxyConfig struct {
-	_         structs.HostLayout
-	ProxyPort uint16
-	_         [6]byte
-	ProxyPid  uint64
-	Command   [16]int8
+	_           structs.HostLayout
+	ProxyPort   uint16
+	_           [6]byte
+	ProxyPid    uint64
+	FilterByPid bool
+	Command     [16]int8
+	_           [7]byte
 }
 
 type proxySocket struct {
@@ -83,9 +85,10 @@ type proxyProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type proxyMapSpecs struct {
-	MapConfig *ebpf.MapSpec `ebpf:"map_config"`
-	MapPorts  *ebpf.MapSpec `ebpf:"map_ports"`
-	MapSocks  *ebpf.MapSpec `ebpf:"map_socks"`
+	FilterPidMap *ebpf.MapSpec `ebpf:"filter_pid_map"`
+	MapConfig    *ebpf.MapSpec `ebpf:"map_config"`
+	MapPorts     *ebpf.MapSpec `ebpf:"map_ports"`
+	MapSocks     *ebpf.MapSpec `ebpf:"map_socks"`
 }
 
 // proxyVariableSpecs contains global variables before they are loaded into the kernel.
@@ -114,13 +117,15 @@ func (o *proxyObjects) Close() error {
 //
 // It can be passed to loadProxyObjects or ebpf.CollectionSpec.LoadAndAssign.
 type proxyMaps struct {
-	MapConfig *ebpf.Map `ebpf:"map_config"`
-	MapPorts  *ebpf.Map `ebpf:"map_ports"`
-	MapSocks  *ebpf.Map `ebpf:"map_socks"`
+	FilterPidMap *ebpf.Map `ebpf:"filter_pid_map"`
+	MapConfig    *ebpf.Map `ebpf:"map_config"`
+	MapPorts     *ebpf.Map `ebpf:"map_ports"`
+	MapSocks     *ebpf.Map `ebpf:"map_socks"`
 }
 
 func (m *proxyMaps) Close() error {
 	return _ProxyClose(
+		m.FilterPidMap,
 		m.MapConfig,
 		m.MapPorts,
 		m.MapSocks,

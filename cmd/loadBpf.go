@@ -28,6 +28,7 @@ type Options struct {
 	ProxyPort uint16 // Port where the proxy server listens
 	ProxyPid  uint64 // PID of the proxy server
 	Command   string
+	Pids      []uint64
 }
 
 func LoadBpf(options *Options) {
@@ -90,15 +91,22 @@ func LoadBpf(options *Options) {
 		pid = options.ProxyPid
 	}
 	config := proxyConfig{
-		ProxyPort: options.ProxyPort,
-		ProxyPid:  pid,
+		ProxyPort:   options.ProxyPort,
+		ProxyPid:    pid,
+		FilterByPid: len(options.Pids) > 0,
 	}
 	stringToInt8Array(config.Command[:], options.Command)
-
 	err = objs.proxyMaps.MapConfig.Update(&key, &config, ebpf.UpdateAny)
 	if err != nil {
 		log.Fatalf("Failed to update proxyMaps map: %v", err)
 	}
+	for _, pid := range options.Pids {
+		err := objs.FilterPidMap.Update(uint32(pid), int8(1), ebpf.UpdateAny)
+		if err != nil {
+			log.Fatalf("Failed to update FilterPidMap: %v", err)
+		}
+	}
+
 	select {}
 }
 

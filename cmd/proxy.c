@@ -7,11 +7,12 @@
 #include <bpf/bpf_endian.h>
 
 #define MAX_CONNECTIONS 20000
+#define MAX_PIDS 64
 
 struct Config {
   __u16 proxy_port;
   __u64 proxy_pid;
-
+  bool filter_by_pid;
   char command[TASK_COMM_LEN];
 };
 
@@ -21,6 +22,13 @@ struct Socket {
   __u32 dst_addr;
   __u16 dst_port;
 };
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 10);
+    __type(key, u32);
+    __type(value, u8);
+} filter_pid_map SEC(".maps");
 
 struct {
   int (*type)[BPF_MAP_TYPE_ARRAY];
@@ -48,6 +56,26 @@ struct {
 #define AF_INET 2
 
 
+static __always_inline bool
+match(struct Config *conf)
+{
+  if (conf->command[0] == '\0' || !conf->filter_by_pid){
+    return true;
+  }
+
+  if (conf->command[0] != '\0') {
+    char comm[TASK_COMM_LEN];
+    bpf_get_current_comm(comm, sizeof(comm));
+    if (__builtin_memcmp(comm, conf->command, TASK_COMM_LEN) == 0) return true;
+  }
+
+  if(conf->filter_by_pid){
+    if (bpf_map_lookup_elem(&filter_pid_map, &conf->proxy_pid)) return true;
+  }
+
+  return false;
+}
+
 
 SEC("cgroup/connect4")
 int cg_connect4(struct bpf_sock_addr *ctx) {
@@ -61,11 +89,7 @@ int cg_connect4(struct bpf_sock_addr *ctx) {
   if (!conf) return 1;
   if ((bpf_get_current_pid_tgid() >> 32) == conf->proxy_pid) return 1;
 
-  if (conf->command[0] != '\0') {
-    char comm[TASK_COMM_LEN];
-    bpf_get_current_comm(comm, sizeof(comm));
-    if (__builtin_memcmp(comm, conf->command, TASK_COMM_LEN) != 0) return 1;
-  }
+  if (!match(conf)) return 1;
 
   // This field contains the IPv4 address passed to the connect() syscall
   // a.k.a. connect to this socket destination address and port
@@ -86,7 +110,7 @@ int cg_connect4(struct bpf_sock_addr *ctx) {
   ctx->user_ip4 = bpf_htonl(0x7f000001); // 127.0.0.1 == proxy IP
   ctx->user_port = bpf_htonl(conf->proxy_port << 16); // Proxy port
 
-  // bpf_printk("Redirecting client connection to proxy\n");
+  bpf_printk("Redirecting client connection to proxy\n");
 
   return 1;
 }
