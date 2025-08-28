@@ -18,6 +18,25 @@ var (
 var rootCmd = &cobra.Command{
 	Use:   "gotproxy",
 	Short: "A simple tcp transparent proxy tool for Linux",
+	Run: func(cmd *cobra.Command, args []string) {
+		if proxyPid == 0 {
+			StartProxy(proxyPort)
+		}
+		Options := &Options{
+			Command:   command,
+			ProxyPid:  proxyPid,
+			ProxyPort: proxyPort,
+		}
+		for _, pid := range pids {
+			pidInt, err := strconv.ParseUint(pid, 10, 64)
+			if err != nil {
+				fmt.Println("Invalid pid:", pid)
+				continue
+			}
+			Options.Pids = append(Options.Pids, pidInt)
+		}
+		LoadBpf(Options)
+	},
 }
 
 func Execute() {
@@ -29,23 +48,6 @@ func Execute() {
 
 func main() {
 	Execute()
-	if proxyPid == 0 {
-		StartProxy(proxyPort)
-	}
-	Options := &Options{
-		Command:   command,
-		ProxyPid:  proxyPid,
-		ProxyPort: proxyPort,
-	}
-	for _, pid := range pids {
-		pidInt, err := strconv.ParseUint(pid, 10, 64)
-		if err != nil {
-			fmt.Println("Invalid pid:", pid)
-			continue
-		}
-		Options.Pids = append(Options.Pids, pidInt)
-	}
-	LoadBpf(Options)
 }
 
 func init() {
