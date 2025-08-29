@@ -30,6 +30,7 @@ sudo ./gotproxy [flags]
 | **--cmd** | The command name to be proxied. If not provided, all traffic will be proxied globally. |
 | **--p-pid** | The process ID of the proxy. If not provided, the program will automatically start a forwarding proxy. |
 | **--p-port** | The proxy port. |
+| **--pids** | The pid to be proxied, seperate by ','. |
 
 ***Examples***
 1. Proxy a specific command:
