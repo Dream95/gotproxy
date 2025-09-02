@@ -9,9 +9,17 @@
 #define MAX_CONNECTIONS 20000
 #define MAX_PIDS 64
 
+#define DEBUG
+
+#ifdef DEBUG
+  #define BPF_LOG_DEBUG(fmt, ...) bpf_printk(fmt, ##__VA_ARGS__)
+#endif
+
+
 struct Config {
   __u16 proxy_port;
   __u64 proxy_pid;
+  __u32  filter_ip;
   bool filter_by_pid;
   char command[TASK_COMM_LEN];
 };
@@ -54,12 +62,10 @@ struct {
 #define SO_ORIGINAL_DST 80
 
 #define AF_INET 2
-
-
 static __always_inline bool
-match(struct Config *conf)
+match_process(struct Config *conf)
 {
-  if (conf->command[0] == '\0' || !conf->filter_by_pid){
+  if (conf->command[0] == '\0' && !conf->filter_by_pid){
     return true;
   }
 
@@ -89,14 +95,17 @@ int cg_connect4(struct bpf_sock_addr *ctx) {
   if (!conf) return 1;
   if ((bpf_get_current_pid_tgid() >> 32) == conf->proxy_pid) return 1;
 
-  if (!match(conf)) return 1;
+  if (!match_process(conf)) return 1;
 
-  // This field contains the IPv4 address passed to the connect() syscall
-  // a.k.a. connect to this socket destination address and port
+  if (conf->filter_ip){ 
+    if (ctx->user_ip4 != conf->filter_ip) {
+      BPF_LOG_DEBUG("not match ip\n");
+      return 1;
+    }
+  }
+
   __u32 dst_addr = bpf_ntohl(ctx->user_ip4);
-  // This field contains the port number passed to the connect() syscall
   __u16 dst_port = bpf_ntohl(ctx->user_port) >> 16;
-  // Unique identifier for the destination socket
   __u64 cookie = bpf_get_socket_cookie(ctx);
 
   // Store destination socket under cookie key
@@ -110,7 +119,7 @@ int cg_connect4(struct bpf_sock_addr *ctx) {
   ctx->user_ip4 = bpf_htonl(0x7f000001); // 127.0.0.1 == proxy IP
   ctx->user_port = bpf_htonl(conf->proxy_port << 16); // Proxy port
 
-  bpf_printk("Redirecting client connection to proxy\n");
+  BPF_LOG_DEBUG("Redirecting client connection to proxy\n");
 
   return 1;
 }
@@ -119,22 +128,20 @@ int cg_connect4(struct bpf_sock_addr *ctx) {
 // This is just to record client source address and port after succesful connection establishment to the proxy
 SEC("sockops")
 int cg_sock_ops(struct bpf_sock_ops *ctx) {
-  //  bpf_printk("sockops");
   // Only forward on IPv4 connections
   if (ctx->family != AF_INET) return 0;
 
   // Active socket with an established connection
   if (ctx->op == BPF_SOCK_OPS_ACTIVE_ESTABLISHED_CB) {
     __u64 cookie = bpf_get_socket_cookie(ctx);
-    // Lookup the socket in the map for the corresponding cookie
-    // In case the socket is present, store the source port and socket mapping
+   
     struct Socket *sock = bpf_map_lookup_elem(&map_socks, &cookie);
     if (sock) {
       __u16 src_port = ctx->local_port;
       bpf_map_update_elem(&map_ports, &src_port, &cookie, 0);
     }
   }
-  // bpf_printk("sockops hook successful\n");
+  BPF_LOG_DEBUG("sockops hook successful\n");
   return 0;
 }
 
@@ -144,19 +151,11 @@ int cg_sock_ops(struct bpf_sock_ops *ctx) {
 // then establishes a connection with the original target and forwards the client's request.
 SEC("cgroup/getsockopt")
 int cg_sock_opt(struct bpf_sockopt *ctx) {
-  // The SO_ORIGINAL_DST socket option is a specialized option used primarily in the context of network address translation (NAT) and transparent proxying.
-  // In a typical NAT or transparent proxy setup, incoming packets are redirected from their original destination to a proxy server. 
-  // The proxy server, upon receiving the packets, often needs to know the original destination address in order to handle the traffic appropriately. 
-  // This is where SO_ORIGINAL_DST comes into play.
-  // bpf_printk("cg_sock_opt");
   if (ctx->optname != SO_ORIGINAL_DST) return 1;
   // Only forward IPv4 TCP connections
   if (ctx->sk->family != AF_INET) return 1;
   if (ctx->sk->protocol != IPPROTO_TCP) return 1;
 
-  // Get the clients source port
-  // It's actually sk->dst_port because getsockopt() syscall with SO_ORIGINAL_DST socket option
-  // is retrieving the original dst port of the client so it's "querying" the destination port of the client
   __u16 src_port = bpf_ntohs(ctx->sk->dst_port);
 
   // Retrieve the socket cookie using the clients' src_port 
@@ -191,7 +190,7 @@ int tcp_set_state(struct pt_regs *ctx)
     __u64 *cookie = bpf_map_lookup_elem(&map_ports, &src_port);
     if (cookie)
     {
-      // bpf_printk("tcp close\n");
+      BPF_LOG_DEBUG("tcp close\n");
       bpf_map_delete_elem(&map_ports, &src_port);
       bpf_map_delete_elem(&map_socks, &cookie);
     }

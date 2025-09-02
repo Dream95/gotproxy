@@ -18,9 +18,10 @@ type proxyConfig struct {
 	ProxyPort   uint16
 	_           [6]byte
 	ProxyPid    uint64
+	FilterIp    uint32
 	FilterByPid bool
 	Command     [16]int8
-	_           [7]byte
+	_           [3]byte
 }
 
 type proxySocket struct {

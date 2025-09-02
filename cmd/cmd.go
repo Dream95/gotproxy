@@ -1,7 +1,10 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
+	"log"
+	"net"
 	"os"
 	"strconv"
 
@@ -13,19 +16,27 @@ var (
 	proxyPort uint16
 	proxyPid  uint64
 	pids      []string
+	ipStr     string
 )
 
 var rootCmd = &cobra.Command{
 	Use:   "gotproxy",
 	Short: "A simple tcp transparent proxy tool for Linux",
 	Run: func(cmd *cobra.Command, args []string) {
-		if proxyPid == 0 {
-			StartProxy(proxyPort)
-		}
 		Options := &Options{
 			Command:   command,
 			ProxyPid:  proxyPid,
 			ProxyPort: proxyPort,
+		}
+
+		ip, err := ipStrToUnit32()
+		if err != nil {
+			log.Fatal(err)
+		}
+		Options.Ip4 = ip
+
+		if proxyPid == 0 {
+			StartProxy(proxyPort)
 		}
 		for _, pid := range pids {
 			pidInt, err := strconv.ParseUint(pid, 10, 64)
@@ -37,6 +48,22 @@ var rootCmd = &cobra.Command{
 		}
 		LoadBpf(Options)
 	},
+}
+
+func ipStrToUnit32() (uint32, error) {
+	if ipStr == "" {
+		return 0, nil
+	}
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return 0, fmt.Errorf("invalid ip: %s", ipStr)
+	}
+
+	ip = ip.To4()
+	if ip == nil {
+		return 0, fmt.Errorf("is not ipV4: %s", ipStr)
+	}
+	return binary.LittleEndian.Uint32(ip), nil
 }
 
 func Execute() {
@@ -55,4 +82,5 @@ func init() {
 	rootCmd.PersistentFlags().Uint16Var(&proxyPort, "p-port", 18000, "The proxy port")
 	rootCmd.PersistentFlags().Uint64Var(&proxyPid, "p-pid", 0, "The process ID of the proxy. If not provided, the program will automatically start a forwarding proxy.")
 	rootCmd.PersistentFlags().StringSliceVar(&pids, "pids", []string{}, "The pid to be proxied, seperate by ','")
+	rootCmd.PersistentFlags().StringVar(&ipStr, "ip", "", "The ip to be proxied,only support ipv4")
 }
