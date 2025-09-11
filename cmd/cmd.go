@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/binary"
 	"fmt"
+	"gotproxy/common"
 	"log"
 	"net"
 	"os"
@@ -27,6 +28,14 @@ var rootCmd = &cobra.Command{
 			Command:   command,
 			ProxyPid:  proxyPid,
 			ProxyPort: proxyPort,
+		}
+
+		if ok, err := common.HasPermission(); err != nil {
+			log.Fatal("check capabilities failed: ", err)
+			return
+		} else if !ok {
+			log.Fatal("gotproxy requires CAP_BPF to run. Please run gotproxy with sudo.")
+			return
 		}
 
 		ip, err := ipStrToUnit32()
