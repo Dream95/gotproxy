@@ -13,11 +13,12 @@ import (
 )
 
 var (
-	command   string
-	proxyPort uint16
-	proxyPid  uint64
-	pids      []string
-	ipStr     string
+	command         string
+	proxyPort       uint16
+	proxyPid        uint64
+	pids            []string
+	ipStr           string
+	socks5ProxyAddr string
 )
 
 var rootCmd = &cobra.Command{
@@ -45,7 +46,7 @@ var rootCmd = &cobra.Command{
 		Options.Ip4 = ip
 
 		if proxyPid == 0 {
-			StartProxy(proxyPort)
+			StartProxy()
 		}
 		for _, pid := range pids {
 			pidInt, err := strconv.ParseUint(pid, 10, 64)
@@ -92,4 +93,5 @@ func init() {
 	rootCmd.PersistentFlags().Uint64Var(&proxyPid, "p-pid", 0, "The process ID of the proxy. If not provided, the program will automatically start a forwarding proxy.")
 	rootCmd.PersistentFlags().StringSliceVar(&pids, "pids", []string{}, "The pid to be proxied, seperate by ','")
 	rootCmd.PersistentFlags().StringVar(&ipStr, "ip", "", "The ip to be proxied,only support ipv4")
+	rootCmd.PersistentFlags().StringVar(&socks5ProxyAddr, "socks5", "", "The socks5 proxyAddr.")
 }
