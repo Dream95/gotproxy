@@ -14,14 +14,15 @@ import (
 )
 
 type proxyConfig struct {
-	_           structs.HostLayout
-	ProxyPort   uint16
-	_           [6]byte
-	ProxyPid    uint64
-	FilterIp    uint32
-	FilterByPid bool
-	Command     [16]int8
-	_           [3]byte
+	_            structs.HostLayout
+	ProxyPort    uint16
+	_            [6]byte
+	ProxyPid     uint64
+	FilterIp     uint32
+	FilterIpMask uint8
+	FilterByPid  bool
+	Command      [16]int8
+	_            [2]byte
 }
 
 type proxySocket struct {
