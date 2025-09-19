@@ -30,6 +30,7 @@ type Options struct {
 	Command   string
 	Pids      []uint64
 	Ip4       uint32
+	Ip4Mask   uint8
 }
 
 func LoadBpf(options *Options) {
@@ -91,10 +92,11 @@ func LoadBpf(options *Options) {
 		pid = options.ProxyPid
 	}
 	config := proxyConfig{
-		ProxyPort:   options.ProxyPort,
-		ProxyPid:    pid,
-		FilterByPid: len(options.Pids) > 0,
-		FilterIp:    options.Ip4,
+		ProxyPort:    options.ProxyPort,
+		ProxyPid:     pid,
+		FilterByPid:  len(options.Pids) > 0,
+		FilterIp:     options.Ip4,
+		FilterIpMask: options.Ip4Mask,
 	}
 	stringToInt8Array(config.Command[:], options.Command)
 	err = objs.proxyMaps.MapConfig.Update(&key, &config, ebpf.UpdateAny)

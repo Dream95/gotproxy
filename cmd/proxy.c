@@ -20,6 +20,7 @@ struct Config {
   __u16 proxy_port;
   __u64 proxy_pid;
   __u32  filter_ip;
+  __u8 filter_ip_mask;
   bool filter_by_pid;
   char command[TASK_COMM_LEN];
 };
@@ -97,8 +98,11 @@ int cg_connect4(struct bpf_sock_addr *ctx) {
 
   if (!match_process(conf)) return 1;
 
-  if (conf->filter_ip){ 
-    if (ctx->user_ip4 != conf->filter_ip) {
+  if (conf->filter_ip)
+  {
+    __u32 mask = 0xFFFFFFFF >> (32 - conf->filter_ip_mask);
+    if ((ctx->user_ip4 & mask) != (conf->filter_ip & mask))
+    {
       BPF_LOG_DEBUG("not match ip\n");
       return 1;
     }

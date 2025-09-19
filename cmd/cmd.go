@@ -1,11 +1,9 @@
 package main
 
 import (
-	"encoding/binary"
 	"fmt"
 	"gotproxy/common"
 	"log"
-	"net"
 	"os"
 	"strconv"
 
@@ -39,11 +37,12 @@ var rootCmd = &cobra.Command{
 			return
 		}
 
-		ip, err := ipStrToUnit32()
+		ip, mask, err := common.ParseIPWithMask(ipStr)
 		if err != nil {
 			log.Fatal(err)
 		}
 		Options.Ip4 = ip
+		Options.Ip4Mask = mask
 
 		if proxyPid == 0 {
 			StartProxy()
@@ -58,22 +57,6 @@ var rootCmd = &cobra.Command{
 		}
 		LoadBpf(Options)
 	},
-}
-
-func ipStrToUnit32() (uint32, error) {
-	if ipStr == "" {
-		return 0, nil
-	}
-	ip := net.ParseIP(ipStr)
-	if ip == nil {
-		return 0, fmt.Errorf("invalid ip: %s", ipStr)
-	}
-
-	ip = ip.To4()
-	if ip == nil {
-		return 0, fmt.Errorf("is not ipV4: %s", ipStr)
-	}
-	return binary.LittleEndian.Uint32(ip), nil
 }
 
 func Execute() {
