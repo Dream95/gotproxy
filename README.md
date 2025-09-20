@@ -35,7 +35,7 @@ sudo ./gotproxy [flags]
 | :--- | :--- |
 | **--cmd** | The command name to be proxied. If not provided, all traffic will be proxied globally. |
 | **--pids** | The pid to be proxied, seperate by ','. |
-|  **--ip** | The Target IP address to be proxied. |
+|  **--ip** | The Target IP address to be proxied. Supports IPv4 and IPv4 CIDR notation.|
 | **--p-pid** | The process ID of the proxy. If not provided, the program will automatically start a forwarding proxy. |
 | **--p-port** | The proxy port. |
 | **--socks5**	| The SOCKS5 proxy Server network address. If configured, SOCKS5 proxying will be used. |
@@ -66,7 +66,7 @@ Where '192.168.1.2:1080' is the IP and port of the SOCKS5 proxy server.
 * Since UDP network proxying is not yet supported, when using SOCKS5 proxy, please use Do53/TCP or ensure your SOCKS5 server supports server-side DNS resolution.
 
 ## Thanks
-The code is referenced from
+Some code is referenced from
 
 - [transparent-proxy-ebpf](https://github.com/dorkamotorka/transparent-proxy-ebpf)
 - [kyanos](https://github.com/hengyoush/kyanos)
