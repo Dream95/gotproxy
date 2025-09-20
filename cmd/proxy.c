@@ -9,10 +9,12 @@
 #define MAX_CONNECTIONS 20000
 #define MAX_PIDS 64
 
-#define DEBUG
+// #define DEBUG
 
 #ifdef DEBUG
   #define BPF_LOG_DEBUG(fmt, ...) bpf_printk(fmt, ##__VA_ARGS__)
+#else
+  #define BPF_LOG_DEBUG(fmt, ...)
 #endif
 
 
@@ -204,8 +206,3 @@ int tcp_set_state(struct pt_regs *ctx)
 }
 
 char __LICENSE[] SEC("license") = "GPL";
-
-
-
-
-
