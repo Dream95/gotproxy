@@ -79,7 +79,8 @@ match_process(struct Config *conf)
   }
 
   if(conf->filter_by_pid){
-    if (bpf_map_lookup_elem(&filter_pid_map, &conf->proxy_pid)) return true;
+    __u32 current_pid = bpf_get_current_pid_tgid() >> 32;
+    if (bpf_map_lookup_elem(&filter_pid_map, &current_pid)) return true;
   }
 
   return false;
