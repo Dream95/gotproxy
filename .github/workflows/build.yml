@@ -25,6 +25,9 @@ jobs:
     - name: Build
       run: make clean && make build-bpf && make
 
+    - name: Run proxy tests
+      run: sudo ./scripts/test_proxy.sh
+
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
