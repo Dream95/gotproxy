@@ -5,19 +5,19 @@ import (
 	"io"
 	"log"
 	"net"
+
 	"os"
 	"syscall"
 	"time"
 	"unsafe"
 
+	"github.com/cilium/ebpf"
 	"golang.org/x/net/proxy"
 )
 
-func StartProxy() {
-	// log.Printf("Proxy server with PID %d listening on %s", options.ProxyPid, proxyAddr)
+// StartProxy starts TCP (and optionally UDP when udpMap is not nil) proxy on proxyPort.
+func StartProxy(udpMap *ebpf.Map) {
 	proxyAddr := fmt.Sprintf("127.0.0.1:%d", proxyPort)
-	// Start the proxy server on the localhost
-	// We only demonstrate IPv4 in this example, but the same approach can be used for IPv6
 	listener, err := net.Listen("tcp", proxyAddr)
 	if err != nil {
 		log.Fatalf("Failed to start proxy server: %v", err)
@@ -25,6 +25,9 @@ func StartProxy() {
 
 	log.Printf("Proxy server with PID %d listening on %s", os.Getpid(), proxyAddr)
 	go acceptLoop(listener)
+	if udpMap != nil {
+		go StartUDPProxy(proxyAddr, udpMap)
+	}
 }
 
 func acceptLoop(listener net.Listener) {

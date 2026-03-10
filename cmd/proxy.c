@@ -62,6 +62,35 @@ struct {
   __u64 *value;
 } map_ports SEC(".maps");
 
+// Key for UDP original destination lookup: (client_ip, client_port) as seen by proxy
+struct UdpDestKey {
+  __u32 src_ip;
+  __u16 src_port;
+  __u16 pad;
+};
+
+// Value: original destination that was redirected to proxy
+struct UdpDestVal {
+  __u32 dst_ip;
+  __u16 dst_port;
+  __u16 pad;
+};
+
+struct {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __uint(max_entries, MAX_CONNECTIONS);
+  __type(key, struct UdpDestKey);
+  __type(value, struct UdpDestVal);
+} map_udp_dest SEC(".maps");
+
+
+struct {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __uint(max_entries, MAX_CONNECTIONS);
+  __type(key, __u64);
+  __type(value, __u16);
+} map_udp_cookie_to_port SEC(".maps");
+
 #define SO_ORIGINAL_DST 80
 
 #define AF_INET 2
@@ -89,11 +118,9 @@ match_process(struct Config *conf)
 
 SEC("cgroup/connect4")
 int cg_connect4(struct bpf_sock_addr *ctx) {
-  // Only forward IPv4 TCP connections
   if (ctx->user_family != AF_INET) return 1;
-  if (ctx->protocol != IPPROTO_TCP) return 1;
+  if (ctx->protocol != IPPROTO_TCP && ctx->protocol != IPPROTO_UDP) return 1;
 
-  // This prevents the proxy from proxying itself
   __u32 key = 0;
   struct Config *conf = bpf_map_lookup_elem(&map_config, &key);
   if (!conf) return 1;
@@ -113,21 +140,70 @@ int cg_connect4(struct bpf_sock_addr *ctx) {
 
   __u32 dst_addr = bpf_ntohl(ctx->user_ip4);
   __u16 dst_port = bpf_ntohl(ctx->user_port) >> 16;
-  __u64 cookie = bpf_get_socket_cookie(ctx);
 
-  // Store destination socket under cookie key
-  struct Socket sock;
-  __builtin_memset(&sock, 0, sizeof(sock));
-  sock.dst_addr = dst_addr;
-  sock.dst_port = dst_port;
-  bpf_map_update_elem(&map_socks, &cookie, &sock, 0);
+  if (ctx->protocol == IPPROTO_TCP) {
+    __u64 cookie = bpf_get_socket_cookie(ctx);
+    struct Socket sock;
+    __builtin_memset(&sock, 0, sizeof(sock));
+    sock.dst_addr = dst_addr;
+    sock.dst_port = dst_port;
+    bpf_map_update_elem(&map_socks, &cookie, &sock, 0);
 
-  // Redirect the connection to the proxy
-  ctx->user_ip4 = bpf_htonl(0x7f000001); // 127.0.0.1 == proxy IP
-  ctx->user_port = bpf_htonl(conf->proxy_port << 16); // Proxy port
+    ctx->user_ip4 = bpf_htonl(0x7f000001);
+    ctx->user_port = bpf_htonl(conf->proxy_port << 16);
 
-  BPF_LOG_DEBUG("Redirecting client connection to proxy\n");
+    BPF_LOG_DEBUG("TCP: Redirecting to proxy\n");
+    return 1;
+  }
 
+  /*
+   * UDP: read ctx->sk BEFORE any helper that passes ctx as argument.
+   * Helpers like bpf_get_socket_cookie(ctx) or bpf_bind(ctx,...) mark
+   * ctx as "modified", after which the verifier forbids pointer
+   * dereferences through it (e.g. ctx->sk).  Scalar reads/writes
+   * (ctx->user_ip4, ctx->user_port) remain fine.
+   */
+  struct bpf_sock *sk = ctx->sk;
+  if (!sk) return 1;
+  __u16 src_port = sk->src_port;
+
+  if (src_port == 0) {
+    /*
+     * Socket not yet bound — force-bind to a random port.
+     * We pick the value ourselves so we know it without having to
+     * read back from ctx->sk (which is forbidden after bpf_bind).
+     */
+    struct sockaddr_in bind_sa;
+    __builtin_memset(&bind_sa, 0, sizeof(bind_sa));
+    bind_sa.sin_family      = AF_INET;
+    bind_sa.sin_addr.s_addr = 0;
+
+    __u32 rand = bpf_get_prandom_u32();
+    __u16 port = 10000 + (__u16)(rand % 55536);
+    bind_sa.sin_port = bpf_htons(port);
+    if (bpf_bind(ctx, (struct sockaddr *)&bind_sa, sizeof(bind_sa)) == 0)
+      src_port = port;
+  }
+
+  if (src_port == 0)
+    return 1;
+
+  struct UdpDestKey dkey;
+  __builtin_memset(&dkey, 0, sizeof(dkey));
+  dkey.src_ip   = 0x7f000001;
+  dkey.src_port = src_port;
+
+  struct UdpDestVal dval;
+  __builtin_memset(&dval, 0, sizeof(dval));
+  dval.dst_ip   = dst_addr;
+  dval.dst_port = dst_port;
+  bpf_map_update_elem(&map_udp_dest, &dkey, &dval, 0);
+
+  ctx->user_ip4  = bpf_htonl(0x7f000001);
+  ctx->user_port = bpf_htonl(conf->proxy_port << 16);
+
+  BPF_LOG_DEBUG("UDP: redirect %x:%d -> proxy, src_port=%d\n",
+                dst_addr, dst_port, src_port);
   return 1;
 }
 
