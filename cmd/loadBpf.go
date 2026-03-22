@@ -40,12 +40,16 @@ func LoadBpf(options *Options) {
 	}
 
 	// Load the compiled eBPF ELF and load it into the kernel
-	// NOTE: we could also pin the eBPF program
 	var objs proxyObjects
 	if err := loadProxyObjects(&objs, nil); err != nil {
-		log.Print("Error loading eBPF objects:", err)
+		log.Fatalf("Error loading eBPF objects: %v", err)
 	}
 	defer objs.Close()
+
+	// Start TCP (and UDP) proxy so it can use objs.MapUdpDest for UDP original-dest lookup
+	if options.ProxyPid == 0 {
+		StartProxy(objs.MapUdpDest)
+	}
 
 	// Attach eBPF programs to the root cgroup
 	connect4Link, err := link.AttachCgroup(link.CgroupOptions{

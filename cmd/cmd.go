@@ -44,9 +44,6 @@ var rootCmd = &cobra.Command{
 		Options.Ip4 = ip
 		Options.Ip4Mask = mask
 
-		if proxyPid == 0 {
-			StartProxy()
-		}
 		for _, pid := range pids {
 			pidInt, err := strconv.ParseUint(pid, 10, 64)
 			if err != nil {

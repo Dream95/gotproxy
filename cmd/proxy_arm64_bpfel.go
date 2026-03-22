@@ -35,6 +35,20 @@ type proxySocket struct {
 	_       [2]byte
 }
 
+type proxyUdpDestKey struct {
+	_       structs.HostLayout
+	SrcIp   uint32
+	SrcPort uint16
+	Pad     uint16
+}
+
+type proxyUdpDestVal struct {
+	_       structs.HostLayout
+	DstIp   uint32
+	DstPort uint16
+	Pad     uint16
+}
+
 // loadProxy returns the embedded CollectionSpec for proxy.
 func loadProxy() (*ebpf.CollectionSpec, error) {
 	reader := bytes.NewReader(_ProxyBytes)
@@ -87,10 +101,12 @@ type proxyProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type proxyMapSpecs struct {
-	FilterPidMap *ebpf.MapSpec `ebpf:"filter_pid_map"`
-	MapConfig    *ebpf.MapSpec `ebpf:"map_config"`
-	MapPorts     *ebpf.MapSpec `ebpf:"map_ports"`
-	MapSocks     *ebpf.MapSpec `ebpf:"map_socks"`
+	FilterPidMap       *ebpf.MapSpec `ebpf:"filter_pid_map"`
+	MapConfig          *ebpf.MapSpec `ebpf:"map_config"`
+	MapPorts           *ebpf.MapSpec `ebpf:"map_ports"`
+	MapSocks           *ebpf.MapSpec `ebpf:"map_socks"`
+	MapUdpCookieToPort *ebpf.MapSpec `ebpf:"map_udp_cookie_to_port"`
+	MapUdpDest         *ebpf.MapSpec `ebpf:"map_udp_dest"`
 }
 
 // proxyVariableSpecs contains global variables before they are loaded into the kernel.
@@ -119,10 +135,12 @@ func (o *proxyObjects) Close() error {
 //
 // It can be passed to loadProxyObjects or ebpf.CollectionSpec.LoadAndAssign.
 type proxyMaps struct {
-	FilterPidMap *ebpf.Map `ebpf:"filter_pid_map"`
-	MapConfig    *ebpf.Map `ebpf:"map_config"`
-	MapPorts     *ebpf.Map `ebpf:"map_ports"`
-	MapSocks     *ebpf.Map `ebpf:"map_socks"`
+	FilterPidMap       *ebpf.Map `ebpf:"filter_pid_map"`
+	MapConfig          *ebpf.Map `ebpf:"map_config"`
+	MapPorts           *ebpf.Map `ebpf:"map_ports"`
+	MapSocks           *ebpf.Map `ebpf:"map_socks"`
+	MapUdpCookieToPort *ebpf.Map `ebpf:"map_udp_cookie_to_port"`
+	MapUdpDest         *ebpf.Map `ebpf:"map_udp_dest"`
 }
 
 func (m *proxyMaps) Close() error {
@@ -131,6 +149,8 @@ func (m *proxyMaps) Close() error {
 		m.MapConfig,
 		m.MapPorts,
 		m.MapSocks,
+		m.MapUdpCookieToPort,
+		m.MapUdpDest,
 	)
 }
 

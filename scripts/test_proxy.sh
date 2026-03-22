@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# gotproxy basic proxy integration test
+# gotproxy basic proxy integration test (TCP + UDP)
 # Usage: sudo ./scripts/test_proxy.sh
-# Requires: built gotproxy, curl; root (CAP_BPF)
+# Requires: built gotproxy, curl; root (CAP_BPF). UDP test needs dig or nc.
 
 set -e
 
@@ -67,6 +67,14 @@ log_contains_dest() {
   local pattern="$1"
   [[ -z "$LOG_FILE" || ! -f "$LOG_FILE" ]] && return 1
   grep -q "Original destination:.*$pattern" "$LOG_FILE" 2>/dev/null
+}
+
+# Check if log contains UDP original destination (e.g. 1.1.1.1:53)
+# UDP proxy may log "UDP Original destination: ..." or same format as TCP
+log_contains_udp_dest() {
+  local pattern="$1"
+  [[ -z "$LOG_FILE" || ! -f "$LOG_FILE" ]] && return 1
+  grep -qE "(UDP.*Original destination:|Original destination:).*$pattern" "$LOG_FILE" 2>/dev/null
 }
 
 # Environment checks
@@ -181,6 +189,26 @@ test_pids_filter() {
   fi
 }
 
+# --- UDP proxy (basic): DNS over UDP is redirected and forwarded ---
+# Uses DNS (UDP 1.1.1.1:53) as test traffic. Passes when proxy logs UDP original destination.
+test_udp_basic_proxy() {
+  if ! command -v dig &>/dev/null; then
+    info "Test: UDP basic proxy — skipped (dig not installed)"
+    return
+  fi
+  info "Test: UDP basic proxy (DNS to ${EXAMPLE_IP}:53)"
+  start_gotproxy
+  # DNS query over UDP; dig sends to EXAMPLE_IP:53
+  dig +short +time=5 +tries=1 @"$EXAMPLE_IP" example.com &>/dev/null || true
+  if log_contains_udp_dest "${EXAMPLE_IP}:53"; then
+    ok "UDP proxy: DNS request was forwarded (log shows ${EXAMPLE_IP}:53)"
+  else
+    # UDP proxy not implemented yet: no UDP log line
+    fail "UDP proxy: no UDP original destination for ${EXAMPLE_IP}:53 in log (UDP support may not be implemented yet)"
+  fi
+  stop_gotproxy
+}
+
 # --- Combined IP + process-name filter (--ip + --cmd): only when both match ---
 test_ip_cmd_filter() {
   info "Test: combined IP + process-name filter (--ip $EXAMPLE_IP/32 --cmd curl)"
@@ -226,6 +254,7 @@ main() {
   test_cmd_filter
   test_pids_filter
   test_ip_cmd_filter
+  test_udp_basic_proxy
   echo "=========================================="
   echo "  Passed: $PASSED  Failed: $FAILED"
   echo "=========================================="
