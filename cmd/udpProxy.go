@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/cilium/ebpf"
-	"golang.org/x/net/proxy"
+	"github.com/txthinking/socks5"
 )
 
 const udpReadTimeout = 5 * time.Second
@@ -108,9 +108,11 @@ func getUDPOriginalDest(clientAddr *net.UDPAddr, udpMap *ebpf.Map) (string, erro
 }
 
 func dialUDPViaSOCKS5(targetAddr string) (net.Conn, error) {
-	dialer, err := proxy.SOCKS5("udp", socks5ProxyAddr, nil, proxy.Direct)
+
+	client, err := socks5.NewClient(socks5ProxyAddr, "", "", 0, 0)
 	if err != nil {
-		return nil, fmt.Errorf("SOCKS5 dialer: %w", err)
+		return nil, fmt.Errorf("SOCKS5 client: %w", err)
 	}
-	return dialer.Dial("udp", targetAddr)
+
+	return client.Dial("udp", targetAddr)
 }
