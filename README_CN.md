@@ -40,10 +40,11 @@ sudo ./gotproxy [flags]
 | **--p-pid** | 代理程序的进程id. 会自动过滤不代理该进程的网络通信，以免网络循环。如果没有配置, 本程序会自动启动一个转发代理服务. |
 | **--p-port** | 代理服务监听的端口。 |
 | **--socks5** | socks5代理的服务端地址，如果配置，会进行socks5代理. |
+| **--proto** | 代理协议选择：`both`（默认）/ `tcp` / `udp`。当设置为 `tcp` 时只重定向 TCP 流量；设置为 `udp` 时只重定向 UDP 流量。 |
 
 
 正在开发中的功能：
-支持ipv6,支持udp
+支持ipv6
 
 
 
@@ -60,6 +61,16 @@ sudo ./gotproxy --cmd "curl"
 sudo ./gotproxy --socks5 192.168.1.2:1080
  ```
 其中‘192.168.1.2:1080’是socks5代理服务器的ip和端口
+
+3. 仅代理 TCP:
+```bash
+sudo ./gotproxy --proto tcp
+```
+
+4. 仅代理 UDP:
+```bash
+sudo ./gotproxy --proto udp
+```
 
 ## 已知限制：
 * 理论上应该根据5元组确定一个连接，但是考虑大多数情况目前只根据协议类型和源端口进行连接映射。
