@@ -24,6 +24,8 @@ struct Config {
   __u32  filter_ip;
   __u8 filter_ip_mask;
   bool filter_by_pid;
+  bool enable_tcp;
+  bool enable_udp;
   char command[TASK_COMM_LEN];
 };
 
@@ -142,6 +144,7 @@ int cg_connect4(struct bpf_sock_addr *ctx) {
   __u16 dst_port = bpf_ntohl(ctx->user_port) >> 16;
 
   if (ctx->protocol == IPPROTO_TCP) {
+    if (!conf->enable_tcp) return 1;
     __u64 cookie = bpf_get_socket_cookie(ctx);
     struct Socket sock;
     __builtin_memset(&sock, 0, sizeof(sock));
@@ -163,6 +166,7 @@ int cg_connect4(struct bpf_sock_addr *ctx) {
    * dereferences through it (e.g. ctx->sk).  Scalar reads/writes
    * (ctx->user_ip4, ctx->user_port) remain fine.
    */
+  if (!conf->enable_udp) return 1;
   struct bpf_sock *sk = ctx->sk;
   if (!sk) return 1;
   __u16 src_port = sk->src_port;

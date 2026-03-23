@@ -17,16 +17,31 @@ var (
 	pids            []string
 	ipStr           string
 	socks5ProxyAddr string
+	proto           string
 )
 
 var rootCmd = &cobra.Command{
 	Use:   "gotproxy",
 	Short: "A simple tcp transparent proxy tool for Linux",
 	Run: func(cmd *cobra.Command, args []string) {
+		var enableTCP, enableUDP bool
+		switch proto {
+		case "both":
+			enableTCP, enableUDP = true, true
+		case "tcp":
+			enableTCP, enableUDP = true, false
+		case "udp":
+			enableTCP, enableUDP = false, true
+		default:
+			log.Fatalf("Invalid --proto value %q, expected one of: both|tcp|udp", proto)
+		}
+
 		Options := &Options{
 			Command:   command,
 			ProxyPid:  proxyPid,
 			ProxyPort: proxyPort,
+			EnableTCP: enableTCP,
+			EnableUDP: enableUDP,
 		}
 
 		if ok, err := common.HasPermission(); err != nil {
@@ -74,4 +89,5 @@ func init() {
 	rootCmd.PersistentFlags().StringSliceVar(&pids, "pids", []string{}, "The pid to be proxied, seperate by ','")
 	rootCmd.PersistentFlags().StringVar(&ipStr, "ip", "", "The ip to be proxied,only support ipv4")
 	rootCmd.PersistentFlags().StringVar(&socks5ProxyAddr, "socks5", "", "The socks5 proxyAddr.")
+	rootCmd.PersistentFlags().StringVar(&proto, "proto", "both", "Proxy protocol: both|tcp|udp")
 }

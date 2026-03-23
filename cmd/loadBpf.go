@@ -31,6 +31,8 @@ type Options struct {
 	Pids      []uint64
 	Ip4       uint32
 	Ip4Mask   uint8
+	EnableTCP bool
+	EnableUDP bool
 }
 
 func LoadBpf(options *Options) {
@@ -46,9 +48,20 @@ func LoadBpf(options *Options) {
 	}
 	defer objs.Close()
 
+	// Log the effective proxy protocol before starting user-space forwarding.
+	mode := "both"
+	if options.EnableTCP && !options.EnableUDP {
+		mode = "tcp"
+	} else if !options.EnableTCP && options.EnableUDP {
+		mode = "udp"
+	} else if !options.EnableTCP && !options.EnableUDP {
+		mode = "none"
+	}
+	log.Printf("Proxy protocol enabled: %s (tcp=%v udp=%v)", mode, options.EnableTCP, options.EnableUDP)
+
 	// Start TCP (and UDP) proxy so it can use objs.MapUdpDest for UDP original-dest lookup
 	if options.ProxyPid == 0 {
-		StartProxy(objs.MapUdpDest)
+		StartProxy(objs.MapUdpDest, options.EnableTCP, options.EnableUDP)
 	}
 
 	// Attach eBPF programs to the root cgroup
@@ -101,6 +114,8 @@ func LoadBpf(options *Options) {
 		FilterByPid:  len(options.Pids) > 0,
 		FilterIp:     options.Ip4,
 		FilterIpMask: options.Ip4Mask,
+		EnableTcp:    options.EnableTCP,
+		EnableUdp:    options.EnableUDP,
 	}
 	stringToInt8Array(config.Command[:], options.Command)
 	err = objs.proxyMaps.MapConfig.Update(&key, &config, ebpf.UpdateAny)

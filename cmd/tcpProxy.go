@@ -15,18 +15,27 @@ import (
 	"golang.org/x/net/proxy"
 )
 
-// StartProxy starts TCP (and optionally UDP when udpMap is not nil) proxy on proxyPort.
-func StartProxy(udpMap *ebpf.Map) {
+// StartProxy starts TCP/UDP proxy on proxyPort based on enableTCP/enableUDP.
+func StartProxy(udpMap *ebpf.Map, enableTCP bool, enableUDP bool) {
 	proxyAddr := fmt.Sprintf("127.0.0.1:%d", proxyPort)
-	listener, err := net.Listen("tcp", proxyAddr)
-	if err != nil {
-		log.Fatalf("Failed to start proxy server: %v", err)
+
+	if !enableTCP && !enableUDP {
+		log.Printf("Proxy: enableTCP and enableUDP are both false, nothing to start")
+		return
 	}
 
-	log.Printf("Proxy server with PID %d listening on %s", os.Getpid(), proxyAddr)
-	go acceptLoop(listener)
-	if udpMap != nil {
+	if enableTCP {
+		listener, err := net.Listen("tcp", proxyAddr)
+		if err != nil {
+			log.Fatalf("Failed to start TCP proxy server: %v", err)
+		}
+		log.Printf("TCP proxy server with PID %d listening on %s", os.Getpid(), proxyAddr)
+		go acceptLoop(listener)
+	}
+
+	if enableUDP && udpMap != nil {
 		go StartUDPProxy(proxyAddr, udpMap)
+		log.Printf("UDP proxy server with PID %d listening on %s", os.Getpid(), proxyAddr)
 	}
 }
 
