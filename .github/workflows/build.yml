@@ -5,9 +5,12 @@ on:
     branches: ["main"]
 
 jobs:
-
   build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
     steps:
     - uses: actions/checkout@v4
 
@@ -21,15 +24,24 @@ jobs:
 
     - name: Submodule
       run: git submodule update --init --recursive
-    
-    - name: Build
+
+    - name: Build amd64
+      if: matrix.arch == 'amd64'
       run: make clean && make build-bpf && make
 
+    - name: Build arm64
+      if: matrix.arch == 'arm64'
+      run: make clean && make build-bpf && GOOS=linux GOARCH=arm64 go build -o gotproxy ./cmd
+
     - name: Run proxy tests
+      if: matrix.arch == 'amd64'
       run: sudo ./scripts/test_proxy.sh
+
+    - name: Package artifact
+      run: tar -czf gotproxy_${{ matrix.arch }}.tar.gz gotproxy
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: build-artifact 
-        path: ./gotproxy  
+        name: gotproxy_${{ matrix.arch }}
+        path: ./gotproxy_${{ matrix.arch }}.tar.gz
