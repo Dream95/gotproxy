@@ -143,6 +143,10 @@ int cg_connect4(struct bpf_sock_addr *ctx) {
   __u32 dst_addr = bpf_ntohl(ctx->user_ip4);
   __u16 dst_port = bpf_ntohl(ctx->user_port) >> 16;
 
+  /* Do not proxy localhost (IPv4 loopback 127.0.0.0/8). */
+  if ((dst_addr & 0xff000000) == 0x7f000000)
+    return 1;
+
   if (ctx->protocol == IPPROTO_TCP) {
     if (!conf->enable_tcp) return 1;
     __u64 cookie = bpf_get_socket_cookie(ctx);

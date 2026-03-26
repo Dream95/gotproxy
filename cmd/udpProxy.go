@@ -30,7 +30,6 @@ func StartUDPProxy(addr string, udpMap *ebpf.Map) {
 		return
 	}
 	defer conn.Close()
-	log.Printf("UDP proxy listening on %s", addr)
 
 	buf := make([]byte, 64*1024)
 	for {
