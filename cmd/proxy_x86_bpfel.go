@@ -21,9 +21,11 @@ type proxyConfig struct {
 	FilterIp     uint32
 	FilterIpMask uint8
 	FilterByPid  bool
+	FilterByPgid bool
 	EnableTcp    bool
 	EnableUdp    bool
 	Command      [16]int8
+	_            [7]byte
 }
 
 type proxySocket struct {

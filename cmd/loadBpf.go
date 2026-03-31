@@ -112,6 +112,7 @@ func LoadBpf(options *Options) {
 		ProxyPort:    options.ProxyPort,
 		ProxyPid:     pid,
 		FilterByPid:  len(options.Pids) > 0,
+		FilterByPgid: len(options.Pids) > 0,
 		FilterIp:     options.Ip4,
 		FilterIpMask: options.Ip4Mask,
 		EnableTcp:    options.EnableTCP,

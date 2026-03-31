@@ -24,6 +24,7 @@ struct Config {
   __u32  filter_ip;
   __u8 filter_ip_mask;
   bool filter_by_pid;
+  bool filter_by_pgid;
   bool enable_tcp;
   bool enable_udp;
   char command[TASK_COMM_LEN];
@@ -96,10 +97,26 @@ struct {
 #define SO_ORIGINAL_DST 80
 
 #define AF_INET 2
+
+static __always_inline __u32
+get_current_pgid(void)
+{
+  struct task_struct *task = (struct task_struct *)bpf_get_current_task_btf();
+  if (!task)
+    return 0;
+
+  /* PIDTYPE_PGID is 2 in kernel enum pid_type. */
+  struct pid *pgid_pid = BPF_CORE_READ(task, signal, pids[2]);
+  if (!pgid_pid)
+    return 0;
+
+  return BPF_CORE_READ(pgid_pid, numbers[0].nr);
+}
+
 static __always_inline bool
 match_process(struct Config *conf)
 {
-  if (conf->command[0] == '\0' && !conf->filter_by_pid){
+  if (conf->command[0] == '\0' && !conf->filter_by_pid && !conf->filter_by_pgid){
     return true;
   }
 
@@ -112,6 +129,11 @@ match_process(struct Config *conf)
   if(conf->filter_by_pid){
     __u32 current_pid = bpf_get_current_pid_tgid() >> 32;
     if (bpf_map_lookup_elem(&filter_pid_map, &current_pid)) return true;
+  }
+
+  if(conf->filter_by_pgid){
+    __u32 current_pgid = get_current_pgid();
+    if (current_pgid && bpf_map_lookup_elem(&filter_pid_map, &current_pgid)) return true;
   }
 
   return false;
