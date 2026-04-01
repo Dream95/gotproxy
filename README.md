@@ -73,7 +73,7 @@ sudo ./gotproxy --proto udp
 
 * In scenarios where proxying is based on process name, if a process starts a child process and uses execve to execute a new command, proxying will not work.
 
-* Since UDP network proxying is not yet supported, when using SOCKS5 proxy, please use Do53/TCP or ensure your SOCKS5 server supports server-side DNS resolution.
+* The current implementation of UDP proxy is not perfect, and there may be issues in certain scenarios.
 
 ## Thanks
 Some code is referenced from
