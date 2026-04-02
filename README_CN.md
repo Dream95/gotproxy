@@ -40,6 +40,8 @@ sudo ./gotproxy [flags]
 | **--p-pid** | 代理程序的进程id. 会自动过滤不代理该进程的网络通信，以免网络循环。如果没有配置, 本程序会自动启动一个转发代理服务. |
 | **--p-port** | 代理服务监听的端口。 |
 | **--socks5** | socks5代理的服务端地址，如果配置，会进行socks5代理. |
+| **--socks5-user** | socks5 账号（RFC1929）。需要同时设置 `--socks5-pass`。 |
+| **--socks5-pass** | socks5 密码（RFC1929）。需要同时设置 `--socks5-user`。 |
 | **--proto** | 代理协议选择：`both`（默认）/ `tcp` / `udp`。当设置为 `tcp` 时只重定向 TCP 流量；设置为 `udp` 时只重定向 UDP 流量。 |
 
 
@@ -61,6 +63,12 @@ sudo ./gotproxy --cmd "curl"
 sudo ./gotproxy --socks5 192.168.1.2:1080
  ```
 其中‘192.168.1.2:1080’是socks5代理服务器的ip和端口
+
+也支持带账号密码的 socks5 上游：
+
+```bash
+sudo ./gotproxy --socks5 192.168.1.2:1080 --socks5-user alice --socks5-pass 'secret'
+```
 
 3. 仅代理 TCP:
 ```bash
