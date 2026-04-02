@@ -116,7 +116,12 @@ func getTargetConnection(conn net.Conn) (net.Conn, error) {
 		return targetConn, nil
 	}
 
-	dialer, err := proxy.SOCKS5("tcp", socks5ProxyAddr, nil, proxy.Direct)
+	auth, err := socks5AuthOrNil()
+	if err != nil {
+		return nil, err
+	}
+
+	dialer, err := proxy.SOCKS5("tcp", socks5ProxyAddr, auth, proxy.Direct)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create SOCKS5 dialer: %w", err)
 	}

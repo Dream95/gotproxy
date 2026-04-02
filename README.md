@@ -39,6 +39,8 @@ sudo ./gotproxy [flags]
 | **--p-pid** | The process ID of the proxy. If not provided, the program will automatically start a forwarding proxy. |
 | **--p-port** | The proxy port. |
 | **--socks5**	| The SOCKS5 proxy Server network address. If configured, SOCKS5 proxying will be used. |
+| **--socks5-user** | SOCKS5 username (RFC1929). Must be set together with `--socks5-pass`. |
+| **--socks5-pass** | SOCKS5 password (RFC1929). Must be set together with `--socks5-user`. |
 | **--proto** | Proxy protocol selection: `both` (default) / `tcp` / `udp`. When set to `tcp`, only TCP traffic will be redirected; when set to `udp`, only UDP traffic will be redirected. |
 
 Features Under Development：
@@ -56,6 +58,12 @@ sudo ./gotproxy --cmd "curl"
 sudo ./gotproxy --socks5 192.168.1.2:1080
  ```
 Where '192.168.1.2:1080' is the IP and port of the SOCKS5 proxy server.
+
+SOCKS5 with username/password:
+
+```bash
+sudo ./gotproxy --socks5 192.168.1.2:1080 --socks5-user alice --socks5-pass 'secret'
+```
 
 3. TCP-only proxy:
 ```bash
