@@ -106,7 +106,7 @@ func getTargetConnection(conn net.Conn) (net.Conn, error) {
 	targetAddr := net.IPv4(originalDst.SinAddr[0], originalDst.SinAddr[1], originalDst.SinAddr[2], originalDst.SinAddr[3]).String()
 	targetPort := (uint16(originalDst.SinPort[0]) << 8) | uint16(originalDst.SinPort[1])
 
-	fmt.Printf("Original destination: %s:%d\n", targetAddr, targetPort)
+	fmt.Printf("TCP Original destination: %s:%d\n", targetAddr, targetPort)
 
 	if socks5ProxyAddr == "" {
 		targetConn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", targetAddr, targetPort), 5*time.Second)

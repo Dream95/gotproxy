@@ -2,9 +2,11 @@ package main
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"time"
 
 	"github.com/cilium/ebpf"
@@ -77,6 +79,12 @@ func handleUDPPacket(proxyConn *net.UDPConn, clientAddr *net.UDPAddr, payload []
 	respBuf := make([]byte, 64*1024)
 	m, err := remoteConn.Read(respBuf)
 	if err != nil {
+		if errors.Is(err, os.ErrDeadlineExceeded) {
+			return
+		}
+		if ne, ok := err.(net.Error); ok && ne.Timeout() {
+			return
+		}
 		log.Printf("UDP proxy: read from %s: %v", targetAddr, err)
 		return
 	}
