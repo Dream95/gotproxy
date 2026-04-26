@@ -36,6 +36,7 @@ sudo ./gotproxy [flags]
 | :--- | :--- |
 | **--cmd** | 需要代理的进程名称. 如果没有配置，则会进行全局流量代理. |
 | **--pids** | 需要代理的进程id, 按照逗号进行分割. |
+| **--container-name** | 需要代理的容器名称（Docker 运行中的容器名）。 |
 | **--ip** | 需要代理的目标ip. 支持ipv4和ipv4 CIDR.|
 | **--p-pid** | 代理程序的进程id. 会自动过滤不代理该进程的网络通信，以免网络循环。如果没有配置, 本程序会自动启动一个转发代理服务. |
 | **--p-port** | 代理服务监听的端口。 |
@@ -79,6 +80,17 @@ sudo ./gotproxy --proto tcp
 ```bash
 sudo ./gotproxy --proto udp
 ```
+
+5. 按容器名称代理:
+```bash
+sudo ./gotproxy --container-name test-kyanos
+```
+
+6. 容器名 + pid 同时过滤:
+```bash
+sudo ./gotproxy --container-name test-kyanos --pids 1234
+```
+当同时配置多个进程/容器过滤条件（如 `--container-name`、`--cmd`、`--pids`）时，使用 OR 关系：命中任意一个条件就会被代理。
 
 ## 已知限制：
 * 理论上应该根据5元组确定一个连接，但是考虑大多数情况目前只根据协议类型和源端口进行连接映射。

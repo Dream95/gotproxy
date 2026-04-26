@@ -14,18 +14,20 @@ import (
 )
 
 type proxyConfig struct {
-	_            structs.HostLayout
-	ProxyPort    uint16
-	_            [6]byte
-	ProxyPid     uint64
-	FilterIp     uint32
-	FilterIpMask uint8
-	FilterByPid  bool
-	FilterByPgid bool
-	EnableTcp    bool
-	EnableUdp    bool
-	Command      [16]int8
-	_            [7]byte
+	_                 structs.HostLayout
+	ProxyPort         uint16
+	_                 [6]byte
+	ProxyPid          uint64
+	ProxyIp           uint32
+	FilterIp          uint32
+	FilterIpMask      uint8
+	FilterByPid       bool
+	FilterByPgid      bool
+	FilterByContainer bool
+	EnableTcp         bool
+	EnableUdp         bool
+	Command           [16]int8
+	_                 [2]byte
 }
 
 type proxySocket struct {
@@ -104,7 +106,10 @@ type proxyProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type proxyMapSpecs struct {
+	FilterMntnsMap     *ebpf.MapSpec `ebpf:"filter_mntns_map"`
+	FilterNetnsMap     *ebpf.MapSpec `ebpf:"filter_netns_map"`
 	FilterPidMap       *ebpf.MapSpec `ebpf:"filter_pid_map"`
+	FilterPidnsMap     *ebpf.MapSpec `ebpf:"filter_pidns_map"`
 	MapConfig          *ebpf.MapSpec `ebpf:"map_config"`
 	MapPorts           *ebpf.MapSpec `ebpf:"map_ports"`
 	MapSocks           *ebpf.MapSpec `ebpf:"map_socks"`
@@ -138,7 +143,10 @@ func (o *proxyObjects) Close() error {
 //
 // It can be passed to loadProxyObjects or ebpf.CollectionSpec.LoadAndAssign.
 type proxyMaps struct {
+	FilterMntnsMap     *ebpf.Map `ebpf:"filter_mntns_map"`
+	FilterNetnsMap     *ebpf.Map `ebpf:"filter_netns_map"`
 	FilterPidMap       *ebpf.Map `ebpf:"filter_pid_map"`
+	FilterPidnsMap     *ebpf.Map `ebpf:"filter_pidns_map"`
 	MapConfig          *ebpf.Map `ebpf:"map_config"`
 	MapPorts           *ebpf.Map `ebpf:"map_ports"`
 	MapSocks           *ebpf.Map `ebpf:"map_socks"`
@@ -148,7 +156,10 @@ type proxyMaps struct {
 
 func (m *proxyMaps) Close() error {
 	return _ProxyClose(
+		m.FilterMntnsMap,
+		m.FilterNetnsMap,
 		m.FilterPidMap,
+		m.FilterPidnsMap,
 		m.MapConfig,
 		m.MapPorts,
 		m.MapSocks,
