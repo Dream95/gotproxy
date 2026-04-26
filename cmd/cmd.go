@@ -15,6 +15,7 @@ var (
 	proxyPort       uint16
 	proxyPid        uint64
 	pids            []string
+	containerName   string
 	ipStr           string
 	socks5ProxyAddr string
 	socks5User      string
@@ -43,11 +44,12 @@ var rootCmd = &cobra.Command{
 		}
 
 		Options := &Options{
-			Command:   command,
-			ProxyPid:  proxyPid,
-			ProxyPort: proxyPort,
-			EnableTCP: enableTCP,
-			EnableUDP: enableUDP,
+			Command:       command,
+			ProxyPid:      proxyPid,
+			ProxyPort:     proxyPort,
+			ContainerName: containerName,
+			EnableTCP:     enableTCP,
+			EnableUDP:     enableUDP,
 		}
 
 		if ok, err := common.HasPermission(); err != nil {
@@ -93,6 +95,7 @@ func init() {
 	rootCmd.PersistentFlags().Uint16Var(&proxyPort, "p-port", 18000, "The proxy port")
 	rootCmd.PersistentFlags().Uint64Var(&proxyPid, "p-pid", 0, "The process ID of the proxy. If not provided, the program will automatically start a forwarding proxy.")
 	rootCmd.PersistentFlags().StringSliceVar(&pids, "pids", []string{}, "The pid to be proxied, seperate by ','")
+	rootCmd.PersistentFlags().StringVar(&containerName, "container-name", "", "The container name to be proxied")
 	rootCmd.PersistentFlags().StringVar(&ipStr, "ip", "", "The ip to be proxied,only support ipv4")
 	rootCmd.PersistentFlags().StringVar(&socks5ProxyAddr, "socks5", "", "The socks5 proxyAddr.")
 	rootCmd.PersistentFlags().StringVar(&socks5User, "socks5-user", "", "The SOCKS5 username. Requires --socks5-pass.")

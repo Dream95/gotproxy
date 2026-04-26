@@ -107,7 +107,11 @@ func getUDPOriginalDest(clientAddr *net.UDPAddr, udpMap *ebpf.Map) (string, erro
 	}
 	var val proxyUdpDestVal
 	if err := udpMap.Lookup(&key, &val); err != nil {
-		return "", err
+		// Fallback entry keyed only by source port for container/bridge paths.
+		key.SrcIp = 0
+		if err := udpMap.Lookup(&key, &val); err != nil {
+			return "", err
+		}
 	}
 	// DstIp is network order (big-endian), DstPort is host order
 	targetIP := net.IPv4(byte(val.DstIp>>24), byte(val.DstIp>>16), byte(val.DstIp>>8), byte(val.DstIp))

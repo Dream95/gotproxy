@@ -16,8 +16,8 @@ import (
 )
 
 // StartProxy starts TCP/UDP proxy on proxyPort based on enableTCP/enableUDP.
-func StartProxy(udpMap *ebpf.Map, enableTCP bool, enableUDP bool) {
-	proxyAddr := fmt.Sprintf("127.0.0.1:%d", proxyPort)
+func StartProxy(udpMap *ebpf.Map, enableTCP bool, enableUDP bool, listenHost string) {
+	proxyAddr := fmt.Sprintf("%s:%d", listenHost, proxyPort)
 
 	if !enableTCP && !enableUDP {
 		log.Printf("Proxy: enableTCP and enableUDP are both false, nothing to start")
@@ -106,7 +106,14 @@ func getTargetConnection(conn net.Conn) (net.Conn, error) {
 	targetAddr := net.IPv4(originalDst.SinAddr[0], originalDst.SinAddr[1], originalDst.SinAddr[2], originalDst.SinAddr[3]).String()
 	targetPort := (uint16(originalDst.SinPort[0]) << 8) | uint16(originalDst.SinPort[1])
 
-	fmt.Printf("TCP Original destination: %s:%d\n", targetAddr, targetPort)
+	sourceAddr := conn.RemoteAddr().String()
+	sourceIP, sourcePort, splitErr := net.SplitHostPort(sourceAddr)
+	if splitErr != nil {
+		sourceIP = sourceAddr
+		sourcePort = "unknown"
+	}
+
+	fmt.Printf("TCP Source: %s:%s -> Original destination: %s:%d\n", sourceIP, sourcePort, targetAddr, targetPort)
 
 	if socks5ProxyAddr == "" {
 		targetConn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", targetAddr, targetPort), 5*time.Second)

@@ -35,6 +35,7 @@ sudo ./gotproxy [flags]
 | :--- | :--- |
 | **--cmd** | The command name to be proxied. If not provided, all traffic will be proxied globally. |
 | **--pids** | The pid to be proxied, seperate by ','. |
+| **--container-name** | The container name to be proxied (Docker running container name). |
 |  **--ip** | The Target IP address to be proxied. Supports IPv4 and IPv4 CIDR notation.|
 | **--p-pid** | The process ID of the proxy. If not provided, the program will automatically start a forwarding proxy. |
 | **--p-port** | The proxy port. |
@@ -74,6 +75,17 @@ sudo ./gotproxy --proto tcp
 ```bash
 sudo ./gotproxy --proto udp
 ```
+
+5. Proxy by container name:
+```bash
+sudo ./gotproxy --container-name test-kyanos
+```
+
+6. Use container and pid together:
+```bash
+sudo ./gotproxy --container-name test-kyanos --pids 1234
+```
+When multiple process/container filters are specified (such as `--container-name`, `--cmd`, `--pids`), they use OR semantics: matching any one filter will be proxied.
 
 
 ## Known Limitations ##
