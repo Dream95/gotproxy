@@ -156,10 +156,6 @@ func LoadBpf(options *Options) {
 		}
 	}
 	if options.ContainerName != "" {
-		if err := common.EnsureKernelAtLeast(common.KernelVersion{Major: 4, Minor: 14, Patch: 0}, "container-name filter"); err != nil {
-			log.Fatal(err)
-		}
-
 		containerNS, err := common.ResolveContainerNamespacesByName(context.Background(), options.ContainerName)
 		if err != nil {
 			log.Fatalf("Failed to resolve container namespaces: %v", err)
