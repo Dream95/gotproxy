@@ -83,12 +83,12 @@ sudo ./gotproxy --proto udp
 
 5. 按容器名称代理:
 ```bash
-sudo ./gotproxy --container-name test-kyanos
+sudo ./gotproxy --container-name curl-test
 ```
 
 6. 容器名 + pid 同时过滤:
 ```bash
-sudo ./gotproxy --container-name test-kyanos --pids 1234
+sudo ./gotproxy --container-name curl-test --pids 1234
 ```
 当同时配置多个进程/容器过滤条件（如 `--container-name`、`--cmd`、`--pids`）时，使用 OR 关系：命中任意一个条件就会被代理。
 
@@ -96,7 +96,7 @@ sudo ./gotproxy --container-name test-kyanos --pids 1234
 * 理论上应该根据5元组确定一个连接，但是考虑大多数情况目前只根据协议类型和源端口进行连接映射。
 * 在根据进程名称进行代理的场景中，如果进程启动了子进程并使用了execve执行一个新命令，会无法进行代理。
 * 目前的udp代理实现并不完善，某些场景下可能存在问题。
-
+* 如果你的 Linux 发行版使用 `127.0.0.53` 作为 DNS 需要将 DNS 指向真实的上游服务器，否则可能出现域名解析异常。
 
 ## 感谢
 一些代码引用自：

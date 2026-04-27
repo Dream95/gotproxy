@@ -78,12 +78,12 @@ sudo ./gotproxy --proto udp
 
 5. Proxy by container name:
 ```bash
-sudo ./gotproxy --container-name test-kyanos
+sudo ./gotproxy --container-name curl-test
 ```
 
 6. Use container and pid together:
 ```bash
-sudo ./gotproxy --container-name test-kyanos --pids 1234
+sudo ./gotproxy --container-name curl-test --pids 1234
 ```
 When multiple process/container filters are specified (such as `--container-name`, `--cmd`, `--pids`), they use OR semantics: matching any one filter will be proxied.
 
@@ -94,6 +94,8 @@ When multiple process/container filters are specified (such as `--container-name
 * In scenarios where proxying is based on process name, if a process starts a child process and uses execve to execute a new command, proxying will not work.
 
 * The current implementation of UDP proxy is not perfect, and there may be issues in certain scenarios.
+
+* If your distro uses `127.0.0.53` for DNS, switch to a real upstream DNS , otherwise DNS may fail.
 
 ## Thanks
 Some code is referenced from
