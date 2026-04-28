@@ -38,6 +38,12 @@ jobs:
       if: matrix.arch == 'amd64'
       run: sudo ./scripts/test_proxy.sh
 
+    - name: Run git proxy tests
+      if: matrix.arch == 'amd64'
+      env:
+        TEST_REMOTE_URL: https://github.com/octocat/Hello-World
+      run: sudo bash ./scripts/test_git.sh
+
     - name: Package artifact
       run: tar -czf gotproxy_${{ matrix.arch }}.tar.gz gotproxy
 
