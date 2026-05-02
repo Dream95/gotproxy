@@ -43,6 +43,7 @@ sudo ./gotproxy [flags]
 | **--socks5-user** | SOCKS5 username (RFC1929). Must be set together with `--socks5-pass`. |
 | **--socks5-pass** | SOCKS5 password (RFC1929). Must be set together with `--socks5-user`. |
 | **--proto** | Proxy protocol selection: `both` (default) / `tcp` / `udp`. When set to `tcp`, only TCP traffic will be redirected; when set to `udp`, only UDP traffic will be redirected. |
+| **--no-dns53** | Disable automatic UDP DNS rewrite from `127.0.0.53:53` to `1.1.1.1:53` (enabled by default). |
 
 Features Under Development：
 IPv6 support
@@ -95,7 +96,7 @@ When multiple process/container filters are specified (such as `--container-name
 
 * The current implementation of UDP proxy is not perfect, and there may be issues in certain scenarios.
 
-* If your distro uses `127.0.0.53` for DNS, switch to a real upstream DNS , otherwise DNS may fail.
+* By default, UDP DNS destination `127.0.0.53:53` is automatically rewritten to `1.1.1.1:53`; set `--no-dns53` to turn this off.
 
 ## Thanks
 Some code is referenced from

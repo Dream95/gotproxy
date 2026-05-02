@@ -15,6 +15,11 @@ import (
 
 const udpReadTimeout = 5 * time.Second
 
+const (
+	localDNSStubAddr = "127.0.0.53:53"
+	publicDNSAddr    = "1.1.1.1:53"
+)
+
 // StartUDPProxy listens on addr (UDP) and forwards packets to original destinations
 // looked up from the BPF map (key = client addr, value = original dst ip:port).
 func StartUDPProxy(addr string, udpMap *ebpf.Map) {
@@ -55,6 +60,7 @@ func handleUDPPacket(proxyConn *net.UDPConn, clientAddr *net.UDPAddr, payload []
 		log.Printf("UDP proxy: lookup original dest for %s: %v", clientAddr, err)
 		return
 	}
+	targetAddr = maybeRewriteLocalDNSStub(targetAddr)
 	fmt.Printf("UDP Original destination: %s\n", targetAddr)
 
 	var remoteConn net.Conn
@@ -92,6 +98,17 @@ func handleUDPPacket(proxyConn *net.UDPConn, clientAddr *net.UDPAddr, payload []
 	if err != nil {
 		log.Printf("UDP proxy: write back to client %s: %v", clientAddr, err)
 	}
+}
+
+func maybeRewriteLocalDNSStub(targetAddr string) string {
+	if noDNS53 {
+		return targetAddr
+	}
+	if targetAddr != localDNSStubAddr {
+		return targetAddr
+	}
+	log.Printf("UDP proxy: rewrite DNS destination %s -> %s", localDNSStubAddr, publicDNSAddr)
+	return publicDNSAddr
 }
 
 // getUDPOriginalDest looks up the BPF map with key (clientIP, clientPort) and returns "ip:port".

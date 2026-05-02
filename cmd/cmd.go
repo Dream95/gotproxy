@@ -21,6 +21,7 @@ var (
 	socks5User      string
 	socks5Pass      string
 	proto           string
+	noDNS53         bool
 )
 
 var rootCmd = &cobra.Command{
@@ -101,4 +102,5 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&socks5User, "socks5-user", "", "The SOCKS5 username. Requires --socks5-pass.")
 	rootCmd.PersistentFlags().StringVar(&socks5Pass, "socks5-pass", "", "The SOCKS5 password. Requires --socks5-user.")
 	rootCmd.PersistentFlags().StringVar(&proto, "proto", "both", "Proxy protocol: both|tcp|udp")
+	rootCmd.PersistentFlags().BoolVar(&noDNS53, "no-dns53", false, "Disable UDP DNS destination rewrite from 127.0.0.53:53 to 1.1.1.1:53")
 }
