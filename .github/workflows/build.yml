@@ -34,15 +34,6 @@ jobs:
       if: matrix.arch == 'arm64'
       run: make clean && make build-bpf && GOOS=linux GOARCH=arm64 go build -o gotproxy ./cmd
 
-    - name: Set DNS to 1.1.1.1 (avoid 127.0.0.53)
-      if: matrix.arch == 'amd64'
-      run: |
-        set -e
-        sudo rm -f /etc/resolv.conf
-        printf "nameserver 1.1.1.1\nnameserver 1.0.0.1\noptions timeout:1 attempts:2\n" | sudo tee /etc/resolv.conf >/dev/null
-        echo "[INFO] /etc/resolv.conf:"
-        cat /etc/resolv.conf
-
     - name: Run proxy tests
       if: matrix.arch == 'amd64'
       run: sudo ./scripts/test_proxy.sh
