@@ -25,9 +25,12 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "gotproxy",
-	Short: "A simple tcp transparent proxy tool for Linux",
+	Use:     "gotproxy",
+	Version: Version,
+	Short:   "A simple tcp transparent proxy tool for Linux",
 	Run: func(cmd *cobra.Command, args []string) {
+		log.Printf("gotproxy version %s", Version)
+
 		if err := validateSocks5UpstreamConfig(); err != nil {
 			log.Fatal(err)
 		}
