@@ -1,10 +1,12 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net"
+	"strings"
 
 	"os"
 	"syscall"
@@ -68,17 +70,71 @@ func handleConnection(conn net.Conn) {
 		log.Printf("Connection error: %v", err)
 		return
 	}
+	defer targetConn.Close()
 
-	go func() {
-		_, err = io.Copy(targetConn, conn)
-		if err != nil {
-			log.Printf("Failed copying data to target: %v", err)
-		}
-	}()
-	_, err = io.Copy(conn, targetConn)
-	if err != nil {
-		log.Printf("Failed copying data from target: %v", err)
+	err = proxyBidirectional(conn, targetConn)
+	if err != nil && !isExpectedCopyError(err) {
+		log.Printf("Proxy copy error: %v", err)
 	}
+}
+
+type closeWriter interface {
+	CloseWrite() error
+}
+
+func proxyBidirectional(a net.Conn, b net.Conn) error {
+	errCh := make(chan error, 2)
+
+	// a -> b
+	go func() {
+		_, err := io.Copy(b, a)
+		// Signal to the other direction that no more data will be sent to b.
+		if cw, ok := b.(closeWriter); ok {
+			_ = cw.CloseWrite()
+		}
+		errCh <- err
+	}()
+
+	// b -> a
+	go func() {
+		_, err := io.Copy(a, b)
+		if cw, ok := a.(closeWriter); ok {
+			_ = cw.CloseWrite()
+		}
+		errCh <- err
+	}()
+
+	// Wait for both directions to complete; return first non-nil error.
+	var firstErr error
+	for range 2 {
+		if err := <-errCh; err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
+func isExpectedCopyError(err error) bool {
+	if err == nil {
+		return true
+	}
+	if errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed) {
+		return true
+	}
+
+	// Common benign errors during shutdown/race of half-closes.
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		if errors.Is(opErr.Err, syscall.ECONNRESET) || errors.Is(opErr.Err, syscall.EPIPE) {
+			return true
+		}
+	}
+
+	msg := err.Error()
+	if strings.Contains(msg, "use of closed network connection") {
+		return true
+	}
+	return false
 }
 
 func getTargetConnection(conn net.Conn) (net.Conn, error) {
@@ -113,7 +169,7 @@ func getTargetConnection(conn net.Conn) (net.Conn, error) {
 		sourcePort = "unknown"
 	}
 
-	fmt.Printf("TCP Source: %s:%s -> Original destination: %s:%d\n", sourceIP, sourcePort, targetAddr, targetPort)
+	log.Printf("TCP Source: %s:%s -> Original destination: %s:%d", sourceIP, sourcePort, targetAddr, targetPort)
 
 	if socks5ProxyAddr == "" {
 		targetConn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", targetAddr, targetPort), 5*time.Second)
