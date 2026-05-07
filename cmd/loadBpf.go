@@ -37,6 +37,7 @@ type Options struct {
 	Ip4Mask       uint8
 	EnableTCP     bool
 	EnableUDP     bool
+	Mirror        MirrorOptions
 }
 
 func LoadBpf(options *Options) {
@@ -85,7 +86,7 @@ func LoadBpf(options *Options) {
 
 	// Start TCP (and UDP) proxy so it can use objs.MapUdpDest for UDP original-dest lookup
 	if options.ProxyPid == 0 {
-		StartProxy(objs.MapUdpDest, options.EnableTCP, options.EnableUDP, proxyListenHost)
+		StartProxy(objs.MapUdpDest, options.EnableTCP, options.EnableUDP, proxyListenHost, options.Mirror)
 	}
 
 	// Attach eBPF programs to the root cgroup

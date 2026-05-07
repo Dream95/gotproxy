@@ -44,6 +44,13 @@ sudo ./gotproxy [flags]
 | **--socks5-pass** | SOCKS5 password (RFC1929). Must be set together with `--socks5-user`. |
 | **--proto** | Proxy protocol selection: `both` (default) / `tcp` / `udp`. When set to `tcp`, only TCP traffic will be redirected; when set to `udp`, only UDP traffic will be redirected. |
 | **--no-dns53** | Disable automatic UDP DNS rewrite from `127.0.0.53:53` to `1.1.1.1:53` (enabled by default). |
+| **--mirror-enable** | Enable best-effort traffic mirroring. |
+| **--mirror-target** | Mirror destination address, for example `10.0.0.2:9000`. |
+| **--mirror-proto** | Mirror protocol: `auto` (default, follows `--proto`) / `both` / `tcp` / `udp`. |
+| **--mirror-timeout-ms** | Mirror write timeout in milliseconds (default: `100`). |
+| **--mirror-queue** | Mirror async queue size (default: `1024`). |
+| **--mirror-drop-on-full** | Drop mirrored packets when queue is full (default: `true`). |
+
 
 Features Under Development：
 IPv6 support
