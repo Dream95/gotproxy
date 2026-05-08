@@ -6,9 +6,9 @@ import (
 	"io"
 	"log"
 	"net"
-	"strings"
-
 	"os"
+	"strings"
+	"sync"
 	"syscall"
 	"time"
 	"unsafe"
@@ -18,8 +18,12 @@ import (
 )
 
 // StartProxy starts TCP/UDP proxy on proxyPort based on enableTCP/enableUDP.
-func StartProxy(udpMap *ebpf.Map, enableTCP bool, enableUDP bool, listenHost string) {
+func StartProxy(udpMap *ebpf.Map, enableTCP bool, enableUDP bool, listenHost string, mirrorOpts MirrorOptions) {
 	proxyAddr := fmt.Sprintf("%s:%d", listenHost, proxyPort)
+	mirror := NewMirrorDispatcher(mirrorOpts)
+	if mirror != nil && strings.TrimSpace(mirrorOpts.Target) == proxyAddr {
+		log.Fatalf("Invalid mirror config: --mirror-target must not equal proxy listen address %s", proxyAddr)
+	}
 
 	if !enableTCP && !enableUDP {
 		log.Printf("Proxy: enableTCP and enableUDP are both false, nothing to start")
@@ -32,16 +36,16 @@ func StartProxy(udpMap *ebpf.Map, enableTCP bool, enableUDP bool, listenHost str
 			log.Fatalf("Failed to start TCP proxy server: %v", err)
 		}
 		log.Printf("TCP proxy server with PID %d listening on %s", os.Getpid(), proxyAddr)
-		go acceptLoop(listener)
+		go acceptLoop(listener, mirror)
 	}
 
 	if enableUDP && udpMap != nil {
-		go StartUDPProxy(proxyAddr, udpMap)
+		go StartUDPProxy(proxyAddr, udpMap, mirror)
 		log.Printf("UDP proxy server with PID %d listening on %s", os.Getpid(), proxyAddr)
 	}
 }
 
-func acceptLoop(listener net.Listener) {
+func acceptLoop(listener net.Listener, mirror *MirrorDispatcher) {
 	defer listener.Close()
 	for {
 		conn, err := listener.Accept()
@@ -50,7 +54,7 @@ func acceptLoop(listener net.Listener) {
 			continue
 		}
 
-		go handleConnection(conn)
+		go handleConnection(conn, mirror)
 	}
 }
 
@@ -62,7 +66,7 @@ func getsockopt(s int, level int, optname int, optval unsafe.Pointer, optlen *ui
 	return
 }
 
-func handleConnection(conn net.Conn) {
+func handleConnection(conn net.Conn, mirror *MirrorDispatcher) {
 	defer conn.Close()
 
 	targetConn, err := getTargetConnection(conn)
@@ -72,9 +76,57 @@ func handleConnection(conn net.Conn) {
 	}
 	defer targetConn.Close()
 
-	err = proxyBidirectional(conn, targetConn)
-	if err != nil && !isExpectedCopyError(err) {
-		log.Printf("Proxy copy error: %v", err)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_, copyErr := copyWithMirror(targetConn, conn, func(chunk []byte) {
+			if mirror != nil && mirror.ShouldMirror("tcp") {
+				mirror.Enqueue("tcp", chunk)
+			}
+		})
+		if copyErr != nil && copyErr != io.EOF {
+			log.Printf("Failed copying data to target: %v", copyErr)
+		}
+	}()
+	_, err = copyWithMirror(conn, targetConn, nil)
+	if err != nil {
+		log.Printf("Failed copying data from target: %v", err)
+	}
+	wg.Wait()
+}
+
+func copyWithMirror(dst io.Writer, src io.Reader, mirrorFn func([]byte)) (int64, error) {
+	buf := make([]byte, 32*1024)
+	var written int64
+	for {
+		nr, readErr := src.Read(buf)
+		if nr > 0 {
+			chunk := buf[:nr]
+			nwTotal := 0
+			for nwTotal < nr {
+				nw, writeErr := dst.Write(chunk[nwTotal:])
+				if nw > 0 {
+					nwTotal += nw
+				}
+				if writeErr != nil {
+					return written, writeErr
+				}
+				if nw == 0 {
+					return written, io.ErrShortWrite
+				}
+			}
+			written += int64(nr)
+			if mirrorFn != nil {
+				mirrorFn(chunk)
+			}
+		}
+		if readErr != nil {
+			if readErr == io.EOF {
+				return written, nil
+			}
+			return written, readErr
+		}
 	}
 }
 

@@ -22,7 +22,7 @@ const (
 
 // StartUDPProxy listens on addr (UDP) and forwards packets to original destinations
 // looked up from the BPF map (key = client addr, value = original dst ip:port).
-func StartUDPProxy(addr string, udpMap *ebpf.Map) {
+func StartUDPProxy(addr string, udpMap *ebpf.Map, mirror *MirrorDispatcher) {
 	if udpMap == nil {
 		return
 	}
@@ -50,11 +50,11 @@ func StartUDPProxy(addr string, udpMap *ebpf.Map) {
 		}
 		payload := make([]byte, n)
 		copy(payload, buf[:n])
-		go handleUDPPacket(conn, clientAddr, payload, udpMap)
+		go handleUDPPacket(conn, clientAddr, payload, udpMap, mirror)
 	}
 }
 
-func handleUDPPacket(proxyConn *net.UDPConn, clientAddr *net.UDPAddr, payload []byte, udpMap *ebpf.Map) {
+func handleUDPPacket(proxyConn *net.UDPConn, clientAddr *net.UDPAddr, payload []byte, udpMap *ebpf.Map, mirror *MirrorDispatcher) {
 	targetAddr, err := getUDPOriginalDest(clientAddr, udpMap)
 	if err != nil {
 		log.Printf("UDP proxy: lookup original dest for %s: %v", clientAddr, err)
@@ -80,6 +80,9 @@ func handleUDPPacket(proxyConn *net.UDPConn, clientAddr *net.UDPAddr, payload []
 		log.Printf("UDP proxy: write to %s: %v", targetAddr, err)
 		return
 	}
+	if mirror != nil && mirror.ShouldMirror("udp") {
+		mirror.Enqueue("udp", payload)
+	}
 
 	remoteConn.SetReadDeadline(time.Now().Add(udpReadTimeout))
 	respBuf := make([]byte, 64*1024)
@@ -97,6 +100,7 @@ func handleUDPPacket(proxyConn *net.UDPConn, clientAddr *net.UDPAddr, payload []
 	_, err = proxyConn.WriteToUDP(respBuf[:m], clientAddr)
 	if err != nil {
 		log.Printf("UDP proxy: write back to client %s: %v", clientAddr, err)
+		return
 	}
 }
 

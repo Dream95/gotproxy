@@ -32,6 +32,8 @@
 ```bash
 sudo ./gotproxy [flags]
 ```
+### 代理 / 转发 flags
+
 | Flag | 描述 |
 | :--- | :--- |
 | **--cmd** | 需要代理的进程名称. 如果没有配置，则会进行全局流量代理. |
@@ -45,6 +47,19 @@ sudo ./gotproxy [flags]
 | **--socks5-pass** | socks5 密码（RFC1929）。需要同时设置 `--socks5-user`。 |
 | **--proto** | 代理协议选择：`both`（默认）/ `tcp` / `udp`。当设置为 `tcp` 时只重定向 TCP 流量；设置为 `udp` 时只重定向 UDP 流量。 |
 | **--no-dns53** | 关闭 UDP DNS 对 `127.0.0.53:53` 的自动改写。默认会自动改写为 `1.1.1.1:53`。 |
+
+### Mirror（流量复制）flags
+
+Mirror 与代理/转发功能相互独立：它会尽力将原始流量复制一份发送到指定目标。
+
+| Flag | 描述 |
+| :--- | :--- |
+| **--mirror-enable** | 开启尽力而为的流量复制。 |
+| **--mirror-target** | 复制目标地址，例如 `10.0.0.2:9000`。 |
+| **--mirror-proto** | 复制协议：`auto`（默认，跟随 `--proto`）/ `both` / `tcp` / `udp`。 |
+| **--mirror-timeout-ms** | 复制写超时时间（毫秒，默认 `100`）。 |
+| **--mirror-queue** | 复制异步队列大小（默认 `1024`）。 |
+| **--mirror-drop-on-full** | 当队列满时是否丢弃复制数据（默认 `true`）。 |
 
 
 正在开发中的功能：
@@ -82,12 +97,18 @@ sudo ./gotproxy --proto tcp
 sudo ./gotproxy --proto udp
 ```
 
-5. 按容器名称代理:
+5. 代理并开启流量镜像（Mirror）:
+
+```bash
+sudo ./gotproxy --proto both --mirror-enable --mirror-target 10.0.0.2:9000
+```
+
+6. 按容器名称代理:
 ```bash
 sudo ./gotproxy --container-name curl-test
 ```
 
-6. 容器名 + pid 同时过滤:
+7. 容器名 + pid 同时过滤:
 ```bash
 sudo ./gotproxy --container-name curl-test --pids 1234
 ```
