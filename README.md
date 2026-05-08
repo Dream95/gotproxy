@@ -31,6 +31,8 @@ Download binary from [release](https://github.com/Dream95/gotproxy/releases) or 
 ```bash
 sudo ./gotproxy [flags]
 ```
+### Proxy / forwarding flags
+
 | Flag | Description |
 | :--- | :--- |
 | **--cmd** | The command name to be proxied. If not provided, all traffic will be proxied globally. |
@@ -44,6 +46,13 @@ sudo ./gotproxy [flags]
 | **--socks5-pass** | SOCKS5 password (RFC1929). Must be set together with `--socks5-user`. |
 | **--proto** | Proxy protocol selection: `both` (default) / `tcp` / `udp`. When set to `tcp`, only TCP traffic will be redirected; when set to `udp`, only UDP traffic will be redirected. |
 | **--no-dns53** | Disable automatic UDP DNS rewrite from `127.0.0.53:53` to `1.1.1.1:53` (enabled by default). |
+
+### Mirror (traffic mirroring) flags
+
+Mirroring is independent of proxy forwarding: it best-effort duplicates the original traffic to a target address.
+
+| Flag | Description |
+| :--- | :--- |
 | **--mirror-enable** | Enable best-effort traffic mirroring. |
 | **--mirror-target** | Mirror destination address, for example `10.0.0.2:9000`. |
 | **--mirror-proto** | Mirror protocol: `auto` (default, follows `--proto`) / `both` / `tcp` / `udp`. |
@@ -84,12 +93,18 @@ sudo ./gotproxy --proto tcp
 sudo ./gotproxy --proto udp
 ```
 
-5. Proxy by container name:
+5. Proxy with traffic mirroring:
+
+```bash
+sudo ./gotproxy --proto both --mirror-enable --mirror-target 10.0.0.2:9000
+```
+
+6. Proxy by container name:
 ```bash
 sudo ./gotproxy --container-name curl-test
 ```
 
-6. Use container and pid together:
+7. Use container and pid together:
 ```bash
 sudo ./gotproxy --container-name curl-test --pids 1234
 ```
