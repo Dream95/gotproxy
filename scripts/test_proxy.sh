@@ -13,13 +13,19 @@ PROXY_PORT="${PROXY_PORT:-18001}"
 LOG_FILE=""
 GOTPROXY_PID=""
 
-# Test URL: use IP directly to avoid DNS
-TEST_URL="${TEST_URL:-https://1.1.1.1}"
+# Test target: use domain + --resolve to avoid DNS and keep TLS SNI correct.
+# Hitting https://1.1.1.1 directly is flaky across networks (often 4xx/5xx) and
+# makes the test fail even if proxy forwarding works.
+TEST_HOST="${TEST_HOST:-one.one.one.one}"
 # IP used to verify Original destination in proxy log
 EXAMPLE_IP="${EXAMPLE_IP:-1.1.1.1}"
-# URL for "other IP" (not matched by --ip filter) in combined IP+cmd test
-TEST_OTHER_IP_URL="${TEST_OTHER_IP_URL:-https://8.8.8.8}"
-OTHER_IP="${OTHER_IP:-8.8.8.8}"
+TEST_URL="${TEST_URL:-https://${TEST_HOST}/}"
+
+# "Other IP" (not matched by --ip filter) in combined IP+cmd test
+TEST_OTHER_IP="${TEST_OTHER_IP:-8.8.8.8}"
+TEST_OTHER_HOST="${TEST_OTHER_HOST:-dns.google}"
+OTHER_IP="${OTHER_IP:-$TEST_OTHER_IP}"
+TEST_OTHER_IP_URL="${TEST_OTHER_IP_URL:-https://${TEST_OTHER_HOST}/}"
 
 PASSED=0
 FAILED=0
@@ -96,7 +102,10 @@ test_basic_proxy() {
   info "Test: basic proxy (global)"
   start_gotproxy
   local code
-  code=$(curl -sS -4 -o /dev/null -w "%{http_code}" --connect-timeout 10 "$TEST_URL" || echo "000")
+  code=$(curl -sS -4 -o /dev/null -w "%{http_code}" \
+    --connect-timeout 10 \
+    --resolve "${TEST_HOST}:443:${EXAMPLE_IP}" \
+    "$TEST_URL" || echo "000")
   # 200 OK; 301/302 are common redirects (e.g. to HTTPS when using IP), still count as success
   if [[ "$code" != "200" && "$code" != "301" && "$code" != "302" ]]; then
     fail "Basic proxy: curl returned HTTP $code, expected 200/301/302"
@@ -118,7 +127,9 @@ test_cmd_filter() {
   start_gotproxy --cmd "curl"
   local n0 n1 n2
   n0=$(count_original_dest)
-  curl -sS -4 -o /dev/null -w "" --connect-timeout 10 "$TEST_URL" || true
+  curl -sS -4 -o /dev/null -w "" --connect-timeout 10 \
+    --resolve "${TEST_HOST}:443:${EXAMPLE_IP}" \
+    "$TEST_URL" || true
   n1=$(count_original_dest)
   if ! command -v wget &>/dev/null; then
     # Without wget we only check that curl was proxied
@@ -154,7 +165,9 @@ test_pids_filter() {
   pid_file=$(mktemp)
   trap "rm -f $pid_file" RETURN
   # Subshell: write its PID, sleep so we can start gotproxy with that PID, then exec curl (same PID makes the connection)
-  ( echo $BASHPID > "$pid_file"; sleep 4; exec curl -sS -4 -o /dev/null -w "" --connect-timeout 15 "$TEST_URL" ) &
+  ( echo $BASHPID > "$pid_file"; sleep 4; exec curl -sS -4 -o /dev/null -w "" --connect-timeout 15 \
+      --resolve "${TEST_HOST}:443:${EXAMPLE_IP}" \
+      "$TEST_URL" ) &
   local helper_pid=$!
   # Wait for PID file to be written
   local i=0
@@ -173,7 +186,9 @@ test_pids_filter() {
   local n1 n2
   n1=$(count_original_dest)
   # This curl runs in main script (different PID), should NOT be proxied
-  curl -sS -4 -o /dev/null -w "" --connect-timeout 10 "$TEST_URL" || true
+  curl -sS -4 -o /dev/null -w "" --connect-timeout 10 \
+    --resolve "${TEST_HOST}:443:${EXAMPLE_IP}" \
+    "$TEST_URL" || true
   n2=$(count_original_dest)
   local has_dest=0
   log_contains_dest "$EXAMPLE_IP" && has_dest=1
@@ -216,10 +231,14 @@ test_ip_cmd_filter() {
   local n0 n1 n2 n3
   n0=$(count_original_dest)
   # curl to EXAMPLE_IP: matches both --ip and --cmd -> proxied
-  curl -sS -4 -o /dev/null -w "" --connect-timeout 10 "$TEST_URL" || true
+  curl -sS -4 -o /dev/null -w "" --connect-timeout 10 \
+    --resolve "${TEST_HOST}:443:${EXAMPLE_IP}" \
+    "$TEST_URL" || true
   n1=$(count_original_dest)
   # curl to other IP: matches --cmd but not --ip -> not proxied
-  curl -sS -4 -o /dev/null -w "" --connect-timeout 10 "$TEST_OTHER_IP_URL" || true
+  curl -sS -4 -o /dev/null -w "" --connect-timeout 10 \
+    --resolve "${TEST_OTHER_HOST}:443:${TEST_OTHER_IP}" \
+    "$TEST_OTHER_IP_URL" || true
   n2=$(count_original_dest)
   if command -v wget &>/dev/null; then
     # wget to EXAMPLE_IP: matches --ip but not --cmd -> not proxied
