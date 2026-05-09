@@ -2,24 +2,26 @@
 
 [简体中文](./README_CN.md) | English
 
-This is a simple transparent proxy tool developed in Go, leveraging eBPF. It enables transparent proxying for network traffic either globally or targeted by specific IP addresses, process IDs, or process name.
+This is a lightweight networking tool built on eBPF with userspace logic written in Go. It transparently proxies and forwards traffic, with fine-grained control across global scope, specific IPs, process IDs, process names, and other dimensions. Compared with traditional tools such as proxychains, gotproxy supports richer proxying rules and native TCP and UDP. You can enable traffic mirroring (mirror) to duplicate live traffic efficiently to a configured destination for debugging, recording, shadow replay, troubleshooting, and regression testing.
 
-The program offers direct transparent proxy network forwarding with SOCKS5 support, serving as a modern alternative to tools like redsocks and proxychains. Furthermore, it can be integrated with other proxy software or Layer 7 proxies to implement advanced functionalities such as traffic splitting, firewalls, or creating a Mock Server.
+It also composes cleanly with other proxies or Layer 7 (L7) systems for advanced use cases such as traffic splitting or Mock Server scenarios. Complex traffic management is achievable through straightforward flag configuration.
 
 ## 📦 Installation & Usage
 
 **Installation**
 
-Download binary from [release](https://github.com/Dream95/gotproxy/releases) or build from source:
+Download binaries directly from [release](https://github.com/Dream95/gotproxy/releases).
 
-1.  Clone the repository:
+***Build from source***
+
+1. Clone the repository:
     ```bash
     git clone https://github.com/Dream95/gotproxy.git
     cd gotproxy
     git submodule update --init --recursive
     ./init_env.sh
     ```
-2.  Build from source:
+2. Build:
     ```bash
     make build-bpf && make
     ```
@@ -35,16 +37,16 @@ sudo ./gotproxy [flags]
 
 | Flag | Description |
 | :--- | :--- |
-| **--cmd** | The command name to be proxied. If not provided, all traffic will be proxied globally. |
-| **--pids** | The pid to be proxied, seperate by ','. |
-| **--container-name** | The container name to be proxied (Docker running container name). |
-|  **--ip** | The Target IP address to be proxied. Supports IPv4 and IPv4 CIDR notation.|
-| **--p-pid** | The process ID of the proxy. If not provided, the program will automatically start a forwarding proxy. |
-| **--p-port** | The proxy port. |
-| **--socks5**	| The SOCKS5 proxy Server network address. If configured, SOCKS5 proxying will be used. |
+| **--cmd** | Process name to proxy. If not set, traffic is proxied globally. |
+| **--pids** | Process IDs to proxy, comma-separated. |
+| **--container-name** | Container name to proxy (Docker running container name). |
+| **--ip** | Target IP address to proxy. Supports IPv4 and IPv4 CIDR notation. |
+| **--p-pid** | Process ID of the proxy program. Traffic from this process is excluded to avoid proxy loops. If not set, the program starts a forwarding proxy automatically. |
+| **--p-port** | Port the proxy listens on. |
+| **--socks5** | SOCKS5 upstream address. When set, SOCKS5 proxying is used. |
 | **--socks5-user** | SOCKS5 username (RFC1929). Must be set together with `--socks5-pass`. |
 | **--socks5-pass** | SOCKS5 password (RFC1929). Must be set together with `--socks5-user`. |
-| **--proto** | Proxy protocol selection: `both` (default) / `tcp` / `udp`. When set to `tcp`, only TCP traffic will be redirected; when set to `udp`, only UDP traffic will be redirected. |
+| **--proto** | Proxy protocol selection: `both` (default) / `tcp` / `udp`. When set to `tcp`, only TCP traffic is redirected; when set to `udp`, only UDP traffic is redirected. |
 | **--no-dns53** | Disable automatic UDP DNS rewrite from `127.0.0.53:53` to `1.1.1.1:53` (enabled by default). |
 
 ### Mirror (traffic mirroring) flags
@@ -60,22 +62,23 @@ Mirroring is independent of proxy forwarding: it best-effort duplicates the orig
 | **--mirror-queue** | Mirror async queue size (default: `1024`). |
 | **--mirror-drop-on-full** | Drop mirrored packets when queue is full (default: `true`). |
 
+Features under development:
 
-Features Under Development：
 IPv6 support
 
 ***Examples***
-1. Proxy a specific command:
+1. Proxy a specific process name:
 
 ```bash
 sudo ./gotproxy --cmd "curl"
  ```
 
 2. Proxy network traffic and forward via SOCKS5:
+
 ```bash
 sudo ./gotproxy --socks5 192.168.1.2:1080
  ```
-Where '192.168.1.2:1080' is the IP and port of the SOCKS5 proxy server.
+Where `192.168.1.2:1080` is the IP and port of the SOCKS5 proxy server.
 
 SOCKS5 with username/password:
 
@@ -104,20 +107,18 @@ sudo ./gotproxy --proto both --mirror-enable --mirror-target 10.0.0.2:9000
 sudo ./gotproxy --container-name curl-test
 ```
 
-7. Use container and pid together:
+7. Container name and PID filters together:
 ```bash
 sudo ./gotproxy --container-name curl-test --pids 1234
 ```
 When multiple process/container filters are specified (such as `--container-name`, `--cmd`, `--pids`), they use OR semantics: matching any one filter will be proxied.
 
 
-## Known Limitations ##
+## Known limitations:
+
 * Theoretically, a connection should be determined by a 5-tuple, but for most cases, connection mapping is currently based only on protocol type and source port.
-
 * In scenarios where proxying is based on process name, if a process starts a child process and uses execve to execute a new command, proxying will not work.
-
 * The current implementation of UDP proxy is not perfect, and there may be issues in certain scenarios.
-
 * By default, UDP DNS destination `127.0.0.53:53` is automatically rewritten to `1.1.1.1:53`; set `--no-dns53` to turn this off.
 
 ## Thanks
