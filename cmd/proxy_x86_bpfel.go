@@ -30,6 +30,13 @@ type proxyConfig struct {
 	_                 [2]byte
 }
 
+type proxyPortKey struct {
+	_       structs.HostLayout
+	SrcIp   uint32
+	SrcPort uint16
+	Pad     uint16
+}
+
 type proxySocket struct {
 	_       structs.HostLayout
 	SrcAddr uint32

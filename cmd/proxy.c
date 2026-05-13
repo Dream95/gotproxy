@@ -42,6 +42,12 @@ struct Socket {
   __u16 dst_port;
 };
 
+struct PortKey {
+  __u32 src_ip;
+  __u16 src_port;
+  __u16 pad;
+};
+
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 10);
@@ -87,7 +93,7 @@ struct {
 struct {
   int (*type)[BPF_MAP_TYPE_HASH];
   int (*max_entries)[MAX_CONNECTIONS];
-  __u16 *key;
+  struct PortKey *key;
   __u64 *value;
 } map_ports SEC(".maps");
 
@@ -341,10 +347,13 @@ int cg_sock_ops(struct bpf_sock_ops *ctx) {
    
     struct Socket *sock = bpf_map_lookup_elem(&map_socks, &cookie);
     if (sock) {
-      __u16 src_port = ctx->local_port;
-      bpf_map_update_elem(&map_ports, &src_port, &cookie, 0);
-      BPF_LOG_INFO("sockops: map_ports set src_port=%u dst=%x:%u\n",
-                   src_port, sock->dst_addr, sock->dst_port);
+      struct PortKey pkey;
+      __builtin_memset(&pkey, 0, sizeof(pkey));
+      pkey.src_ip = ctx->local_ip4;
+      pkey.src_port = ctx->local_port;
+      bpf_map_update_elem(&map_ports, &pkey, &cookie, 0);
+      BPF_LOG_INFO("sockops: map_ports set src=%x:%u dst=%x:%u\n",
+                   pkey.src_ip, pkey.src_port, sock->dst_addr, sock->dst_port);
     } else {
       BPF_LOG_INFO("sockops: map_socks miss local_port=%u\n", ctx->local_port);
     }
@@ -353,7 +362,7 @@ int cg_sock_ops(struct bpf_sock_ops *ctx) {
 }
 
 // This is triggered when the proxy queries the original destination information through getsockopt SO_ORIGINAL_DST. 
-// This program uses the source port of the client to retrieve the socket's cookie from map_ports, 
+// This program uses the client source ip+port to retrieve the socket's cookie from map_ports,
 // and then from map_socks to get the original destination information, 
 // then establishes a connection with the original target and forwards the client's request.
 SEC("cgroup/getsockopt")
@@ -390,19 +399,24 @@ int cg_sock_opt(struct bpf_sockopt *ctx) {
     return 1;
   }
 
-  __u16 src_port = bpf_ntohs(ctx->sk->dst_port);
+  struct PortKey pkey;
+  __builtin_memset(&pkey, 0, sizeof(pkey));
+  pkey.src_ip = ctx->sk->dst_ip4;
+  pkey.src_port = bpf_ntohs(ctx->sk->dst_port);
 
-  // Retrieve the socket cookie using the clients' src_port 
-  __u64 *cookie = bpf_map_lookup_elem(&map_ports, &src_port);
+  // Retrieve socket cookie using clients' source ip+port
+  __u64 *cookie = bpf_map_lookup_elem(&map_ports, &pkey);
   if (!cookie) {
-    BPF_LOG_INFO("getsockopt: map_ports miss src_port=%u\n", src_port);
+    BPF_LOG_INFO("getsockopt: map_ports miss src=%x:%u\n",
+                 pkey.src_ip, pkey.src_port);
     return 1;
   }
 
   // Using the cookie (socket identifier), retrieve the original socket (client connect to destination) from map_socks
   struct Socket *sock = bpf_map_lookup_elem(&map_socks, cookie);
   if (!sock) {
-    BPF_LOG_INFO("getsockopt: map_socks miss src_port=%u\n", src_port);
+    BPF_LOG_INFO("getsockopt: map_socks miss src=%x:%u\n",
+                 pkey.src_ip, pkey.src_port);
     return 1;
   }
 
@@ -418,8 +432,8 @@ int cg_sock_opt(struct bpf_sockopt *ctx) {
   sa->sin_addr.s_addr = bpf_htonl(sock->dst_addr); 
   sa->sin_port = bpf_htons(sock->dst_port); 
   ctx->retval = 0;
-  BPF_LOG_INFO("getsockopt: restore src_port=%u dst=%x:%u\n",
-               src_port, sock->dst_addr, sock->dst_port);
+  BPF_LOG_INFO("getsockopt: restore src=%x:%u dst=%x:%u\n",
+               pkey.src_ip, pkey.src_port, sock->dst_addr, sock->dst_port);
   return 1;
 }
 
@@ -431,13 +445,16 @@ int tcp_set_state(struct pt_regs *ctx)
 
   if (state == TCP_CLOSE)
   {
-    __u16 src_port = BPF_CORE_READ(sk, __sk_common.skc_num);
-    __u64 *cookie = bpf_map_lookup_elem(&map_ports, &src_port);
+    struct PortKey pkey;
+    __builtin_memset(&pkey, 0, sizeof(pkey));
+    pkey.src_ip = BPF_CORE_READ(sk, __sk_common.skc_rcv_saddr);
+    pkey.src_port = BPF_CORE_READ(sk, __sk_common.skc_num);
+    __u64 *cookie = bpf_map_lookup_elem(&map_ports, &pkey);
     if (cookie)
     {
-      BPF_LOG_INFO("tcp_close: cleanup src_port=%u\n", src_port);
-      bpf_map_delete_elem(&map_ports, &src_port);
-      bpf_map_delete_elem(&map_socks, &cookie);
+      BPF_LOG_INFO("tcp_close: cleanup src=%x:%u\n", pkey.src_ip, pkey.src_port);
+      bpf_map_delete_elem(&map_ports, &pkey);
+      bpf_map_delete_elem(&map_socks, cookie);
     }
   }
 
