@@ -33,7 +33,15 @@ FAILED=0
 info()  { echo "[INFO]  $*"; }
 ok()    { echo "[OK]    $*"; ((PASSED++)) || true; }
 fail()  { echo "[FAIL]  $*"; ((FAILED++)) || true; }
-abort() { echo "[ABORT] $*"; stop_gotproxy 2>/dev/null; exit 1; }
+abort() {
+  echo "[ABORT] $*"
+  if [[ -n "${LOG_FILE:-}" && -f "$LOG_FILE" ]]; then
+    echo "[ABORT] gotproxy log:"
+    cat "$LOG_FILE"
+  fi
+  stop_gotproxy 2>/dev/null
+  exit 1
+}
 
 # Start gotproxy; optional args appended (e.g. --cmd "curl")
 start_gotproxy() {
