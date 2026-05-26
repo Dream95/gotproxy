@@ -31,6 +31,7 @@ type Options struct {
 	ProxyPort     uint16 // Port where the proxy server listens
 	ProxyPid      uint64 // PID of the proxy server
 	Command       string
+	NoCmdTrack    bool // disable fork tracking for --cmd
 	Pids          []uint64
 	ContainerName string
 	Ip4           uint32
@@ -126,6 +127,22 @@ func LoadBpf(options *Options) {
 	}
 	defer kprobeLink.Close()
 
+	trackChildren := options.Command != "" && !options.NoCmdTrack
+	if trackChildren {
+		forkLink, err := link.Tracepoint("sched", "sched_process_fork", objs.TpSchedProcessFork, nil)
+		if err != nil {
+			log.Fatalf("Attaching sched_process_fork tracepoint: %v", err)
+		}
+		defer forkLink.Close()
+
+		exitLink, err := link.Tracepoint("sched", "sched_process_exit", objs.TpSchedProcessExit, nil)
+		if err != nil {
+			log.Fatalf("Attaching sched_process_exit tracepoint: %v", err)
+		}
+		defer exitLink.Close()
+		log.Printf("Process tree tracking enabled for --cmd %q", options.Command)
+	}
+
 	var key uint32 = 0
 	var pid uint64
 	if options.ProxyPid == 0 {
@@ -144,11 +161,15 @@ func LoadBpf(options *Options) {
 		FilterIpMask:      options.Ip4Mask,
 		EnableTcp:         options.EnableTCP,
 		EnableUdp:         options.EnableUDP,
+		TrackChildren:     trackChildren,
 	}
 	stringToInt8Array(config.Command[:], options.Command)
 	err = objs.proxyMaps.MapConfig.Update(&key, &config, ebpf.UpdateAny)
 	if err != nil {
 		log.Fatalf("Failed to update proxyMaps map: %v", err)
+	}
+	if trackChildren {
+		seedTrackedPIDsOrLog(objs.FilterTrackedMap, options.Command, pid)
 	}
 	for _, pid := range options.Pids {
 		err := objs.FilterPidMap.Update(uint32(pid), int8(1), ebpf.UpdateAny)

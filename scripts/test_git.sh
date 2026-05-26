@@ -76,7 +76,7 @@ git_env() {
 
 test_git_ls_remote_proxied() {
   info "Test: git ls-remote via gotproxy (--cmd git)"
-  start_gotproxy 
+  start_gotproxy --cmd git
   local n0 n1
   n0=$(count_original_dest)
 
@@ -87,6 +87,7 @@ test_git_ls_remote_proxied() {
       ok "git ls-remote succeeded and traffic appears proxied (log increased: $n0 -> $n1)"
     else
       fail "git ls-remote succeeded but proxy log did not show forwarding (log: $n0 -> $n1)"
+      [[ -n "$LOG_FILE" && -f "$LOG_FILE" ]] && { info "gotproxy log:"; cat "$LOG_FILE"; }
     fi
   else
     local log_snapshot=""
@@ -102,7 +103,7 @@ test_git_ls_remote_proxied() {
 
 test_git_clone_proxied() {
   info "Test: git clone --depth 1 via gotproxy (--cmd git)"
-  start_gotproxy 
+  start_gotproxy --cmd git
   local n0 n1
   n0=$(count_original_dest)
 
@@ -119,6 +120,7 @@ test_git_clone_proxied() {
       ok "git clone succeeded and traffic appears proxied (log increased: $n0 -> $n1)"
     elif [[ -d "$repo_dir/.git" ]]; then
       fail "git clone succeeded but proxy log did not show forwarding (log: $n0 -> $n1)"
+      [[ -n "$LOG_FILE" && -f "$LOG_FILE" ]] && { info "gotproxy log:"; cat "$LOG_FILE"; }
     else
       fail "git clone reported success but repo dir looks wrong: $repo_dir"
     fi

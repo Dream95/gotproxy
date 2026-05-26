@@ -8,6 +8,7 @@
 
 #define MAX_CONNECTIONS 20000
 #define MAX_PIDS 64
+#define MAX_TRACKED_PIDS 4096
 
 // #define DEBUG
 
@@ -32,6 +33,7 @@ struct Config {
   bool filter_by_container;
   bool enable_tcp;
   bool enable_udp;
+  bool track_children;
   char command[TASK_COMM_LEN];
 };
 
@@ -50,10 +52,17 @@ struct PortKey {
 
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 10);
+    __uint(max_entries, MAX_PIDS);
     __type(key, u32);
     __type(value, u8);
 } filter_pid_map SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, MAX_TRACKED_PIDS);
+    __type(key, u32);
+    __type(value, u8);
+} filter_tracked_map SEC(".maps");
 
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
@@ -173,6 +182,47 @@ match_container_ns(void)
 }
 
 static __always_inline bool
+comm_matches_command(const char comm[TASK_COMM_LEN], const char command[TASK_COMM_LEN])
+{
+  return __builtin_memcmp(comm, command, TASK_COMM_LEN) == 0;
+}
+
+/* Match --cmd and, when tracking children, common git helper comm names. */
+static __always_inline bool
+comm_matches_cmd(struct Config *conf, const char comm[TASK_COMM_LEN])
+{
+  if (comm_matches_command(comm, conf->command))
+    return true;
+  if (!conf->track_children)
+    return false;
+  /* "git" -> also match git-remote-https / git-remote-http (comm may truncate). */
+  if (conf->command[0] == 'g' && conf->command[1] == 'i' &&
+      conf->command[2] == 't' && conf->command[3] == '\0') {
+    if (comm[0] == 'g' && comm[1] == 'i' && comm[2] == 't' &&
+        (comm[3] == '\0' || comm[3] == '-'))
+      return true;
+  }
+  return false;
+}
+
+static __always_inline bool
+parent_should_track(struct Config *conf, __u32 parent_pid, const char parent_comm[TASK_COMM_LEN])
+{
+  if (bpf_map_lookup_elem(&filter_tracked_map, &parent_pid))
+    return true;
+  if (conf->command[0] != '\0' && comm_matches_cmd(conf, parent_comm))
+    return true;
+  return false;
+}
+
+static __always_inline void
+track_pid(__u32 pid)
+{
+  __u8 val = 1;
+  bpf_map_update_elem(&filter_tracked_map, &pid, &val, BPF_ANY);
+}
+
+static __always_inline bool
 match_process(struct Config *conf)
 {
   bool has_cmd = conf->command[0] != '\0';
@@ -184,13 +234,30 @@ match_process(struct Config *conf)
   }
 
   bool cmd_matched = false;
+  bool tracked_matched = false;
   bool pid_matched = false;
   bool container_matched = false;
 
   if (has_cmd) {
     char comm[TASK_COMM_LEN];
     bpf_get_current_comm(comm, sizeof(comm));
-    cmd_matched = (__builtin_memcmp(comm, conf->command, TASK_COMM_LEN) == 0);
+    cmd_matched = comm_matches_cmd(conf, comm);
+    if (conf->track_children) {
+      __u32 current_pid = bpf_get_current_pid_tgid() >> 32;
+      if (bpf_map_lookup_elem(&filter_tracked_map, &current_pid))
+        tracked_matched = true;
+      if (!tracked_matched && !cmd_matched) {
+        struct task_struct *task = (struct task_struct *)bpf_get_current_task_btf();
+        if (task) {
+          struct task_struct *parent = BPF_CORE_READ(task, real_parent);
+          if (parent) {
+            __u32 ppid = BPF_CORE_READ(parent, tgid);
+            if (ppid && bpf_map_lookup_elem(&filter_tracked_map, &ppid))
+              tracked_matched = true;
+          }
+        }
+      }
+    }
   }
 
   if (has_pid_filter && conf->filter_by_pid) {
@@ -212,11 +279,66 @@ match_process(struct Config *conf)
   }
 
   if ((has_container_filter && container_matched) ||
-      (has_cmd && cmd_matched) ||
+      (has_cmd && (cmd_matched || tracked_matched)) ||
       (has_pid_filter && pid_matched)) {
     return true;
   }
   return false;
+}
+
+SEC("tracepoint/sched/sched_process_fork")
+int tp_sched_process_fork(struct trace_event_raw_sched_process_fork *ctx)
+{
+  char parent_comm[TASK_COMM_LEN];
+  __u32 parent_pid = 0;
+  __u32 child_pid = 0;
+
+  /* Read all tracepoint fields before any other helper. */
+  if (bpf_probe_read_kernel(&parent_comm, sizeof(parent_comm), &ctx->parent_comm) < 0)
+    return 0;
+  if (bpf_probe_read_kernel(&parent_pid, sizeof(parent_pid), &ctx->parent_pid) < 0)
+    return 0;
+  if (bpf_probe_read_kernel(&child_pid, sizeof(child_pid), &ctx->child_pid) < 0)
+    return 0;
+
+  __u32 key = 0;
+  struct Config *conf = bpf_map_lookup_elem(&map_config, &key);
+  if (!conf || !conf->track_children)
+    return 0;
+
+  if (child_pid == 0 || parent_pid == 0)
+    return 0;
+  if ((__u64)child_pid == conf->proxy_pid || (__u64)parent_pid == conf->proxy_pid)
+    return 0;
+
+  if (!parent_should_track(conf, parent_pid, parent_comm))
+    return 0;
+
+  track_pid(child_pid);
+  BPF_LOG_INFO("fork: track child=%u parent=%u\n", child_pid, parent_pid);
+  return 0;
+}
+
+SEC("tracepoint/sched/sched_process_exit")
+int tp_sched_process_exit(struct trace_event_raw_sched_process_template *ctx)
+{
+  __u32 pid = 0;
+  if (bpf_probe_read_kernel(&pid, sizeof(pid), &ctx->pid) < 0)
+    return 0;
+
+  __u32 key = 0;
+  struct Config *conf = bpf_map_lookup_elem(&map_config, &key);
+  if (!conf || !conf->track_children)
+    return 0;
+
+  if (pid == 0)
+    return 0;
+  if (!bpf_map_lookup_elem(&filter_tracked_map, &pid))
+    return 0;
+
+  bpf_map_delete_elem(&filter_tracked_map, &pid);
+  BPF_LOG_INFO("exit: untrack pid=%u\n", pid);
+  return 0;
 }
 
 

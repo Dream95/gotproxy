@@ -37,7 +37,8 @@ sudo ./gotproxy [flags]
 
 | Flag | Description |
 | :--- | :--- |
-| **--cmd** | Process name to proxy. If not set, traffic is proxied globally. |
+| **--cmd** | Process name to proxy (`comm`, max 16 bytes). Child processes forked from a matching process are tracked automatically. If not set, traffic is proxied globally. |
+| **--no-cmd-track** | Disable fork-based child tracking for `--cmd` (legacy `comm`-only matching). |
 | **--pids** | Process IDs to proxy, comma-separated. |
 | **--container-name** | Container name to proxy (Docker running container name). |
 | **--ip** | Target IP address to proxy. Supports IPv4 and IPv4 CIDR notation. |
@@ -117,7 +118,7 @@ When multiple process/container filters are specified (such as `--container-name
 ## Known limitations:
 
 * Theoretically, a connection should be determined by a 5-tuple, but for most cases, connection mapping is currently based only on protocol type and source port.
-* In scenarios where proxying is based on process name, if a process starts a child process and uses execve to execute a new command, proxying will not work.
+* With `--cmd`, child processes created via `fork` (including after `execve`, e.g. `git` → `git-remote-https`) are tracked automatically. Use `--no-cmd-track` to restore legacy `comm`-only matching. Processes unrelated to the matched tree are not tracked.
 * The current implementation of UDP proxy is not perfect, and there may be issues in certain scenarios.
 * By default, UDP DNS destination `127.0.0.53:53` is automatically rewritten to `1.1.1.1:53`; set `--no-dns53` to turn this off.
 
