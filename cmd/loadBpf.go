@@ -31,7 +31,7 @@ type Options struct {
 	ProxyPort     uint16 // Port where the proxy server listens
 	ProxyPid      uint64 // PID of the proxy server
 	Command       string
-	NoCmdTrack    bool // disable fork tracking for --cmd
+	FollowForks   bool // track forked children for --cmd (default true)
 	Pids          []uint64
 	ContainerName string
 	Ip4           uint32
@@ -127,7 +127,7 @@ func LoadBpf(options *Options) {
 	}
 	defer kprobeLink.Close()
 
-	trackChildren := options.Command != "" && !options.NoCmdTrack
+	trackChildren := options.Command != "" && options.FollowForks
 	if trackChildren {
 		forkLink, err := link.Tracepoint("sched", "sched_process_fork", objs.TpSchedProcessFork, nil)
 		if err != nil {
