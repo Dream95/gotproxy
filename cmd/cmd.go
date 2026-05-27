@@ -14,6 +14,7 @@ import (
 
 var (
 	command         string
+	followForks     bool
 	proxyPort       uint16
 	proxyPid        uint64
 	pids            []string
@@ -75,6 +76,7 @@ var rootCmd = &cobra.Command{
 
 		Options := &Options{
 			Command:       command,
+			FollowForks:   followForks,
 			ProxyPid:      proxyPid,
 			ProxyPort:     proxyPort,
 			ContainerName: containerName,
@@ -130,6 +132,7 @@ func main() {
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&command, "cmd", "", "The command to be proxied. If not provided, all traffic will be proxied globally.")
+	rootCmd.PersistentFlags().BoolVar(&followForks, "follow-forks", true, "Track child processes forked from --cmd matches (including after execve). Set false for legacy comm-only matching.")
 	rootCmd.PersistentFlags().Uint16Var(&proxyPort, "p-port", 18000, "The proxy port")
 	rootCmd.PersistentFlags().Uint64Var(&proxyPid, "p-pid", 0, "The process ID of the proxy. If not provided, the program will automatically start a forwarding proxy.")
 	rootCmd.PersistentFlags().StringSliceVar(&pids, "pids", []string{}, "The pid to be proxied, seperate by ','")

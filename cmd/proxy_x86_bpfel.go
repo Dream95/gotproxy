@@ -26,8 +26,9 @@ type proxyConfig struct {
 	FilterByContainer bool
 	EnableTcp         bool
 	EnableUdp         bool
+	TrackChildren     bool
 	Command           [16]int8
-	_                 [2]byte
+	_                 [1]byte
 }
 
 type proxyPortKey struct {
@@ -103,10 +104,13 @@ type proxySpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type proxyProgramSpecs struct {
-	CgConnect4  *ebpf.ProgramSpec `ebpf:"cg_connect4"`
-	CgSockOps   *ebpf.ProgramSpec `ebpf:"cg_sock_ops"`
-	CgSockOpt   *ebpf.ProgramSpec `ebpf:"cg_sock_opt"`
-	TcpSetState *ebpf.ProgramSpec `ebpf:"tcp_set_state"`
+	CgConnect4         *ebpf.ProgramSpec `ebpf:"cg_connect4"`
+	CgSockOps          *ebpf.ProgramSpec `ebpf:"cg_sock_ops"`
+	CgSockOpt          *ebpf.ProgramSpec `ebpf:"cg_sock_opt"`
+	TcpSetState        *ebpf.ProgramSpec `ebpf:"tcp_set_state"`
+	TpSchedProcessExec *ebpf.ProgramSpec `ebpf:"tp_sched_process_exec"`
+	TpSchedProcessExit *ebpf.ProgramSpec `ebpf:"tp_sched_process_exit"`
+	TpSchedProcessFork *ebpf.ProgramSpec `ebpf:"tp_sched_process_fork"`
 }
 
 // proxyMapSpecs contains maps before they are loaded into the kernel.
@@ -117,6 +121,7 @@ type proxyMapSpecs struct {
 	FilterNetnsMap     *ebpf.MapSpec `ebpf:"filter_netns_map"`
 	FilterPidMap       *ebpf.MapSpec `ebpf:"filter_pid_map"`
 	FilterPidnsMap     *ebpf.MapSpec `ebpf:"filter_pidns_map"`
+	FilterTrackedMap   *ebpf.MapSpec `ebpf:"filter_tracked_map"`
 	MapConfig          *ebpf.MapSpec `ebpf:"map_config"`
 	MapPorts           *ebpf.MapSpec `ebpf:"map_ports"`
 	MapSocks           *ebpf.MapSpec `ebpf:"map_socks"`
@@ -154,6 +159,7 @@ type proxyMaps struct {
 	FilterNetnsMap     *ebpf.Map `ebpf:"filter_netns_map"`
 	FilterPidMap       *ebpf.Map `ebpf:"filter_pid_map"`
 	FilterPidnsMap     *ebpf.Map `ebpf:"filter_pidns_map"`
+	FilterTrackedMap   *ebpf.Map `ebpf:"filter_tracked_map"`
 	MapConfig          *ebpf.Map `ebpf:"map_config"`
 	MapPorts           *ebpf.Map `ebpf:"map_ports"`
 	MapSocks           *ebpf.Map `ebpf:"map_socks"`
@@ -167,6 +173,7 @@ func (m *proxyMaps) Close() error {
 		m.FilterNetnsMap,
 		m.FilterPidMap,
 		m.FilterPidnsMap,
+		m.FilterTrackedMap,
 		m.MapConfig,
 		m.MapPorts,
 		m.MapSocks,
@@ -185,10 +192,13 @@ type proxyVariables struct {
 //
 // It can be passed to loadProxyObjects or ebpf.CollectionSpec.LoadAndAssign.
 type proxyPrograms struct {
-	CgConnect4  *ebpf.Program `ebpf:"cg_connect4"`
-	CgSockOps   *ebpf.Program `ebpf:"cg_sock_ops"`
-	CgSockOpt   *ebpf.Program `ebpf:"cg_sock_opt"`
-	TcpSetState *ebpf.Program `ebpf:"tcp_set_state"`
+	CgConnect4         *ebpf.Program `ebpf:"cg_connect4"`
+	CgSockOps          *ebpf.Program `ebpf:"cg_sock_ops"`
+	CgSockOpt          *ebpf.Program `ebpf:"cg_sock_opt"`
+	TcpSetState        *ebpf.Program `ebpf:"tcp_set_state"`
+	TpSchedProcessExec *ebpf.Program `ebpf:"tp_sched_process_exec"`
+	TpSchedProcessExit *ebpf.Program `ebpf:"tp_sched_process_exit"`
+	TpSchedProcessFork *ebpf.Program `ebpf:"tp_sched_process_fork"`
 }
 
 func (p *proxyPrograms) Close() error {
@@ -197,6 +207,9 @@ func (p *proxyPrograms) Close() error {
 		p.CgSockOps,
 		p.CgSockOpt,
 		p.TcpSetState,
+		p.TpSchedProcessExec,
+		p.TpSchedProcessExit,
+		p.TpSchedProcessFork,
 	)
 }
 
