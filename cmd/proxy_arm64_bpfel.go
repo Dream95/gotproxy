@@ -108,6 +108,7 @@ type proxyProgramSpecs struct {
 	CgSockOps          *ebpf.ProgramSpec `ebpf:"cg_sock_ops"`
 	CgSockOpt          *ebpf.ProgramSpec `ebpf:"cg_sock_opt"`
 	TcpSetState        *ebpf.ProgramSpec `ebpf:"tcp_set_state"`
+	TpSchedProcessExec *ebpf.ProgramSpec `ebpf:"tp_sched_process_exec"`
 	TpSchedProcessExit *ebpf.ProgramSpec `ebpf:"tp_sched_process_exit"`
 	TpSchedProcessFork *ebpf.ProgramSpec `ebpf:"tp_sched_process_fork"`
 }
@@ -195,6 +196,7 @@ type proxyPrograms struct {
 	CgSockOps          *ebpf.Program `ebpf:"cg_sock_ops"`
 	CgSockOpt          *ebpf.Program `ebpf:"cg_sock_opt"`
 	TcpSetState        *ebpf.Program `ebpf:"tcp_set_state"`
+	TpSchedProcessExec *ebpf.Program `ebpf:"tp_sched_process_exec"`
 	TpSchedProcessExit *ebpf.Program `ebpf:"tp_sched_process_exit"`
 	TpSchedProcessFork *ebpf.Program `ebpf:"tp_sched_process_fork"`
 }
@@ -205,6 +207,7 @@ func (p *proxyPrograms) Close() error {
 		p.CgSockOps,
 		p.CgSockOpt,
 		p.TcpSetState,
+		p.TpSchedProcessExec,
 		p.TpSchedProcessExit,
 		p.TpSchedProcessFork,
 	)

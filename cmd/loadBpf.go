@@ -129,6 +129,12 @@ func LoadBpf(options *Options) {
 
 	trackChildren := options.Command != "" && options.FollowForks
 	if trackChildren {
+		execLink, err := link.Tracepoint("sched", "sched_process_exec", objs.TpSchedProcessExec, nil)
+		if err != nil {
+			log.Fatalf("Attaching sched_process_exec tracepoint: %v", err)
+		}
+		defer execLink.Close()
+
 		forkLink, err := link.Tracepoint("sched", "sched_process_fork", objs.TpSchedProcessFork, nil)
 		if err != nil {
 			log.Fatalf("Attaching sched_process_fork tracepoint: %v", err)

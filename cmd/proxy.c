@@ -205,16 +205,6 @@ comm_matches_cmd(struct Config *conf, const char comm[TASK_COMM_LEN])
   return false;
 }
 
-static __always_inline bool
-parent_should_track(struct Config *conf, __u32 parent_pid, const char parent_comm[TASK_COMM_LEN])
-{
-  if (bpf_map_lookup_elem(&filter_tracked_map, &parent_pid))
-    return true;
-  if (conf->command[0] != '\0' && comm_matches_cmd(conf, parent_comm))
-    return true;
-  return false;
-}
-
 static __always_inline void
 track_pid(__u32 pid)
 {
@@ -286,16 +276,40 @@ match_process(struct Config *conf)
   return false;
 }
 
+/* Track PIDs whose comm matches --cmd after exec. */
+SEC("tracepoint/sched/sched_process_exec")
+int tp_sched_process_exec(struct trace_event_raw_sched_process_exec *ctx)
+{
+  __u32 pid = 0;
+
+  if (BPF_CORE_READ_INTO(&pid, ctx, pid) < 0)
+    return 0;
+
+  __u32 key = 0;
+  struct Config *conf = bpf_map_lookup_elem(&map_config, &key);
+  if (!conf || !conf->track_children || conf->command[0] == '\0')
+    return 0;
+
+  if (pid == 0 || (__u64)pid == conf->proxy_pid)
+    return 0;
+
+  char comm[TASK_COMM_LEN];
+  bpf_get_current_comm(comm, sizeof(comm));
+  if (!comm_matches_cmd(conf, comm))
+    return 0;
+
+  track_pid(pid);
+  BPF_LOG_INFO("exec: track pid=%u\n", pid);
+  return 0;
+}
+
+/* Track forked descendants when parent is already tracked. */
 SEC("tracepoint/sched/sched_process_fork")
 int tp_sched_process_fork(struct trace_event_raw_sched_process_fork *ctx)
 {
-  char parent_comm[TASK_COMM_LEN];
   __u32 parent_pid = 0;
   __u32 child_pid = 0;
-  
-  /* Read all tracepoint fields before any other helper. */
-  // if (BPF_CORE_READ_INTO(&parent_comm, ctx, parent_comm) < 0)
-  //   return 0;
+
   if (BPF_CORE_READ_INTO(&parent_pid, ctx, parent_pid) < 0)
     return 0;
   if (BPF_CORE_READ_INTO(&child_pid, ctx, child_pid) < 0)
@@ -311,8 +325,8 @@ int tp_sched_process_fork(struct trace_event_raw_sched_process_fork *ctx)
   if ((__u64)child_pid == conf->proxy_pid || (__u64)parent_pid == conf->proxy_pid)
     return 0;
 
-  // if (!parent_should_track(conf, parent_pid, parent_comm))
-  //   return 0;
+  if (!bpf_map_lookup_elem(&filter_tracked_map, &parent_pid))
+    return 0;
 
   track_pid(child_pid);
   BPF_LOG_INFO("fork: track child=%u parent=%u\n", child_pid, parent_pid);
