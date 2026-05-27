@@ -294,12 +294,12 @@ int tp_sched_process_fork(struct trace_event_raw_sched_process_fork *ctx)
   __u32 child_pid = 0;
   
   /* Read all tracepoint fields before any other helper. */
-  if (BPF_CORE_READ_INTO(&parent_comm, ctx, parent_comm) < 0)
-    return 0;
-  if (BPF_CORE_READ_INTO(&parent_pid, ctx, parent_pid) < 0)
-    return 0;
-  if (BPF_CORE_READ_INTO(&child_pid, ctx, child_pid) < 0)
-    return 0;
+  // if (BPF_CORE_READ_INTO(&parent_comm, ctx, parent_comm) < 0)
+  //   return 0;
+  // if (BPF_CORE_READ_INTO(&parent_pid, ctx, parent_pid) < 0)
+  //   return 0;
+  // if (BPF_CORE_READ_INTO(&child_pid, ctx, child_pid) < 0)
+  //   return 0;
 
   __u32 key = 0;
   struct Config *conf = bpf_map_lookup_elem(&map_config, &key);
@@ -311,8 +311,8 @@ int tp_sched_process_fork(struct trace_event_raw_sched_process_fork *ctx)
   if ((__u64)child_pid == conf->proxy_pid || (__u64)parent_pid == conf->proxy_pid)
     return 0;
 
-  if (!parent_should_track(conf, parent_pid, parent_comm))
-    return 0;
+  // if (!parent_should_track(conf, parent_pid, parent_comm))
+  //   return 0;
 
   track_pid(child_pid);
   BPF_LOG_INFO("fork: track child=%u parent=%u\n", child_pid, parent_pid);
