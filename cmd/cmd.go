@@ -39,6 +39,7 @@ var rootCmd = &cobra.Command{
 	Short:   "A simple tcp transparent proxy tool for Linux",
 	Run: func(cmd *cobra.Command, args []string) {
 		log.Printf("gotproxy version %s", Version)
+		log.Printf("system: %s", common.SystemInfo())
 
 		if err := validateSocks5UpstreamConfig(); err != nil {
 			log.Fatal(err)
