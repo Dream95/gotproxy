@@ -18,7 +18,6 @@
   #define BPF_LOG_DEBUG(fmt, ...)
 #endif
 
-/* Always-on logs for troubleshooting key hook paths. */
 #define BPF_LOG_INFO(fmt, ...) bpf_printk(fmt, ##__VA_ARGS__)
 
 
@@ -299,7 +298,7 @@ int tp_sched_process_exec(struct trace_event_raw_sched_process_exec *ctx)
     return 0;
 
   track_pid(pid);
-  BPF_LOG_INFO("exec: track pid=%u\n", pid);
+  BPF_LOG_DEBUG("exec: track pid=%u\n", pid);
   return 0;
 }
 
@@ -329,7 +328,7 @@ int tp_sched_process_fork(struct trace_event_raw_sched_process_fork *ctx)
     return 0;
 
   track_pid(child_pid);
-  BPF_LOG_INFO("fork: track child=%u parent=%u\n", child_pid, parent_pid);
+  BPF_LOG_DEBUG("fork: track child=%u parent=%u\n", child_pid, parent_pid);
   return 0;
 }
 
@@ -351,7 +350,7 @@ int tp_sched_process_exit(struct trace_event_raw_sched_process_template *ctx)
     return 0;
 
   bpf_map_delete_elem(&filter_tracked_map, &pid);
-  BPF_LOG_INFO("exit: untrack pid=%u\n", pid);
+  BPF_LOG_DEBUG("exit: untrack pid=%u\n", pid);
   return 0;
 }
 
@@ -370,29 +369,22 @@ int cg_connect4(struct bpf_sock_addr *ctx) {
   }
   if (current_pid == conf->proxy_pid) return 1;
 
-  if (!match_process(conf)) {
-    BPF_LOG_INFO("connect4: process no match pid=%u\n", current_pid);
+  if (!match_process(conf))
     return 1;
-  }
 
   if (conf->filter_ip)
   {
     __u32 mask = 0xFFFFFFFF >> (32 - conf->filter_ip_mask);
     if ((ctx->user_ip4 & mask) != (conf->filter_ip & mask))
-    {
-      BPF_LOG_INFO("connect4: ip no match pid=%u\n", current_pid);
       return 1;
-    }
   }
 
   __u32 dst_addr = bpf_ntohl(ctx->user_ip4);
   __u16 dst_port = bpf_ntohl(ctx->user_port) >> 16;
 
   /* Do not re-proxy traffic that already targets the proxy endpoint. */
-  if (dst_addr == conf->proxy_ip && dst_port == conf->proxy_port) {
-    BPF_LOG_INFO("connect4: skip self target=%x:%u\n", dst_addr, dst_port);
+  if (dst_addr == conf->proxy_ip && dst_port == conf->proxy_port)
     return 1;
-  }
 
   if (ctx->protocol == IPPROTO_TCP) {
     if (!conf->enable_tcp) return 1;
@@ -405,9 +397,8 @@ int cg_connect4(struct bpf_sock_addr *ctx) {
 
     ctx->user_ip4 = bpf_htonl(conf->proxy_ip);
     ctx->user_port = bpf_htonl(conf->proxy_port << 16);
-
-    BPF_LOG_INFO("connect4: tcp redirect dst=%x:%u -> proxy=%x:%u pid=%u\n",
-                 dst_addr, dst_port, conf->proxy_ip, conf->proxy_port, current_pid);
+    BPF_LOG_DEBUG("connect4: tcp redirect dst=%x:%u -> proxy=%x:%u pid=%u\n",
+                  dst_addr, dst_port, conf->proxy_ip, conf->proxy_port, current_pid);
     return 1;
   }
 
@@ -464,9 +455,8 @@ int cg_connect4(struct bpf_sock_addr *ctx) {
 
   ctx->user_ip4  = bpf_htonl(conf->proxy_ip);
   ctx->user_port = bpf_htonl(conf->proxy_port << 16);
-
-  BPF_LOG_INFO("connect4: udp redirect dst=%x:%u src_port=%u proxy=%x:%u pid=%u\n",
-               dst_addr, dst_port, src_port, conf->proxy_ip, conf->proxy_port, current_pid);
+  BPF_LOG_DEBUG("connect4: udp redirect dst=%x:%u src_port=%u proxy=%x:%u pid=%u\n",
+                dst_addr, dst_port, src_port, conf->proxy_ip, conf->proxy_port, current_pid);
   return 1;
 }
 
@@ -488,8 +478,8 @@ int cg_sock_ops(struct bpf_sock_ops *ctx) {
       pkey.src_ip = ctx->local_ip4;
       pkey.src_port = ctx->local_port;
       bpf_map_update_elem(&map_ports, &pkey, &cookie, 0);
-      BPF_LOG_INFO("sockops: map_ports set src=%x:%u dst=%x:%u\n",
-                   pkey.src_ip, pkey.src_port, sock->dst_addr, sock->dst_port);
+      BPF_LOG_DEBUG("sockops: map_ports set src=%x:%u dst=%x:%u\n",
+                    pkey.src_ip, pkey.src_port, sock->dst_addr, sock->dst_port);
     } else {
       BPF_LOG_INFO("sockops: map_socks miss local_port=%u\n", ctx->local_port);
     }
@@ -504,17 +494,13 @@ int cg_sock_ops(struct bpf_sock_ops *ctx) {
 SEC("cgroup/getsockopt")
 int cg_sock_opt(struct bpf_sockopt *ctx) {
   if (ctx->optname != SO_ORIGINAL_DST) return 1;
-  BPF_LOG_INFO("getsockopt: start level=%d optname=%d optlen=%d\n",
-               ctx->level, ctx->optname, ctx->optlen);
 
   /*
    * SO_ORIGINAL_DST is scoped by level (SOL_IP). Without this check we may
    * hit unrelated options that reuse numeric value 80 under other levels.
    */
-  if (ctx->level != SOL_IP) {
-    BPF_LOG_INFO("getsockopt: skip non-sol_ip level=%d\n", ctx->level);
+  if (ctx->level != SOL_IP)
     return 1;
-  }
 
   if (!ctx->sk) {
     BPF_LOG_INFO("getsockopt: sk is null\n");
@@ -526,14 +512,10 @@ int cg_sock_opt(struct bpf_sockopt *ctx) {
    * AF_INET6 sockets (v4-mapped). Keep processing both AF_INET/AF_INET6
    * and restore IPv4 original destination to userspace.
    */
-  if (ctx->sk->family != AF_INET && ctx->sk->family != AF_INET6) {
-    BPF_LOG_INFO("getsockopt: skip unsupported family=%u\n", ctx->sk->family);
+  if (ctx->sk->family != AF_INET && ctx->sk->family != AF_INET6)
     return 1;
-  }
-  if (ctx->sk->protocol != IPPROTO_TCP) {
-    BPF_LOG_INFO("getsockopt: skip protocol=%u\n", ctx->sk->protocol);
+  if (ctx->sk->protocol != IPPROTO_TCP)
     return 1;
-  }
 
   struct PortKey pkey;
   __builtin_memset(&pkey, 0, sizeof(pkey));
@@ -568,8 +550,8 @@ int cg_sock_opt(struct bpf_sockopt *ctx) {
   sa->sin_addr.s_addr = bpf_htonl(sock->dst_addr); 
   sa->sin_port = bpf_htons(sock->dst_port); 
   ctx->retval = 0;
-  BPF_LOG_INFO("getsockopt: restore src=%x:%u dst=%x:%u\n",
-               pkey.src_ip, pkey.src_port, sock->dst_addr, sock->dst_port);
+  BPF_LOG_DEBUG("getsockopt: restore src=%x:%u dst=%x:%u\n",
+                pkey.src_ip, pkey.src_port, sock->dst_addr, sock->dst_port);
   return 1;
 }
 
@@ -588,7 +570,6 @@ int tcp_set_state(struct pt_regs *ctx)
     __u64 *cookie = bpf_map_lookup_elem(&map_ports, &pkey);
     if (cookie)
     {
-      BPF_LOG_INFO("tcp_close: cleanup src=%x:%u\n", pkey.src_ip, pkey.src_port);
       bpf_map_delete_elem(&map_ports, &pkey);
       bpf_map_delete_elem(&map_socks, cookie);
     }
