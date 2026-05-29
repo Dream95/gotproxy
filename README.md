@@ -122,6 +122,15 @@ When multiple process/container filters are specified (such as `--container-name
 * The current implementation of UDP proxy is not perfect, and there may be issues in certain scenarios.
 * By default, UDP DNS destination `127.0.0.53:53` is automatically rewritten to `1.1.1.1:53`; set `--no-dns53` to turn this off.
 
+## License
+
+Userspace code (Go) is licensed under the [Apache License 2.0](LICENSE).
+
+eBPF programs (e.g. `cmd/proxy.c`) are licensed under **GPL-2.0-only OR Apache-2.0**.
+They declare `Dual BSD/GPL` in the BPF ELF `license` section so the Linux kernel
+can load them when GPL-compatible helpers are used. See [NOTICE](NOTICE) for
+third-party components.
+
 ## Thanks
 Some code is referenced from
 

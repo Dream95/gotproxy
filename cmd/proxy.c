@@ -1,5 +1,7 @@
 //go:build ignore
 
+// SPDX-License-Identifier: GPL-2.0-only OR Apache-2.0
+
 #include "vmlinux.h"
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
@@ -578,4 +580,4 @@ int tcp_set_state(struct pt_regs *ctx)
   return 0;
 }
 
-char __LICENSE[] SEC("license") = "GPL";
+char __LICENSE[] SEC("license") = "Dual BSD/GPL";

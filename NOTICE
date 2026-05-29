@@ -1,0 +1,27 @@
+gotproxy
+Copyright 2025-2026 Dream95
+
+This product includes software developed as part of the gotproxy project.
+
+Third-party components
+----------------------
+
+libbpf (git submodule)
+  https://github.com/libbpf/libbpf
+  SPDX-License-Identifier: BSD-2-Clause OR LGPL-2.1
+
+github.com/cilium/ebpf
+  https://github.com/cilium/ebpf
+  SPDX-License-Identifier: Apache-2.0
+
+github.com/spf13/cobra
+  https://github.com/spf13/cobra
+  SPDX-License-Identifier: Apache-2.0
+
+eBPF programs
+-------------
+
+Source files such as cmd/proxy.c are licensed under GPL-2.0-only OR
+Apache-2.0. When loaded into the Linux kernel, those programs declare a
+GPL-compatible license string (Dual BSD/GPL) as required by the kernel
+BPF loader. See README.md for details.

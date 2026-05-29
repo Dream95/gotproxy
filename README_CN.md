@@ -122,6 +122,12 @@ sudo ./gotproxy --container-name curl-test --pids 1234
 * 目前的udp代理实现并不完善，某些场景下可能存在问题。
 * 默认会将 UDP DNS 目标 `127.0.0.53:53` 自动改写为 `1.1.1.1:53`；如需关闭可设置 `--no-dns53`。
 
+## 许可证
+
+用户态代码（Go）采用 [Apache License 2.0](LICENSE)。
+
+eBPF 程序（如 `cmd/proxy.c`）采用 **GPL-2.0-only OR Apache-2.0** 双许可；加载进内核时在 BPF ELF 的 `license` 段声明 `Dual BSD/GPL`，以满足内核对 GPL 兼容 helper 的要求。第三方组件见 [NOTICE](NOTICE)。
+
 ## 感谢
 一些代码引用自：
 
