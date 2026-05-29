@@ -309,7 +309,10 @@ int tp_sched_process_fork(struct trace_event_raw_sched_process_fork *ctx)
 {
   __u32 parent_pid = 0;
   __u32 child_pid = 0;
+  char parent_comm[TASK_COMM_LEN];
 
+  if (BPF_CORE_READ_INTO(&parent_comm, ctx, parent_comm) < 0)
+    return 0;
   if (BPF_CORE_READ_INTO(&parent_pid, ctx, parent_pid) < 0)
     return 0;
   if (BPF_CORE_READ_INTO(&child_pid, ctx, child_pid) < 0)
