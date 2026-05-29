@@ -55,7 +55,7 @@ fi
 
 uname -a
 sudo apt-get update
-sudo apt-get install --yes build-essential pkgconf libelf-dev llvm${CLANG_NUM} clang${CLANG_NUM} linux-tools-common linux-tools-generic ${CROSS_COMPILE_DEB} libssl-dev flex bison bc rsync
+sudo apt-get install --yes build-essential pkgconf libelf-dev llvm${CLANG_NUM} clang${CLANG_NUM} linux-tools-common linux-tools-generic ${CROSS_COMPILE_DEB} flex bison
 
 for tool in "clang" "llc" "llvm-strip"
 do
