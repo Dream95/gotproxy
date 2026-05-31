@@ -44,9 +44,12 @@ sudo ./gotproxy [flags]
 | **--ip** | Target IP address to proxy. Supports IPv4 and IPv4 CIDR notation. |
 | **--p-pid** | Process ID of the proxy program. Traffic from this process is excluded to avoid proxy loops. If not set, the program starts a forwarding proxy automatically. |
 | **--p-port** | Port the proxy listens on. |
-| **--socks5** | SOCKS5 upstream address. When set, SOCKS5 proxying is used. |
+| **--socks5** | SOCKS5 upstream address. When set, SOCKS5 proxying is used. Mutually exclusive with `--http-proxy`. |
 | **--socks5-user** | SOCKS5 username (RFC1929). Must be set together with `--socks5-pass`. |
 | **--socks5-pass** | SOCKS5 password (RFC1929). Must be set together with `--socks5-user`. |
+| **--http-proxy** | HTTP CONNECT upstream address (TCP outbound only). Mutually exclusive with `--socks5`. |
+| **--http-proxy-user** | HTTP proxy username. Must be set together with `--http-proxy-pass`. |
+| **--http-proxy-pass** | HTTP proxy password. Must be set together with `--http-proxy-user`. |
 | **--proto** | Proxy protocol selection: `both` (default) / `tcp` / `udp`. When set to `tcp`, only TCP traffic is redirected; when set to `udp`, only UDP traffic is redirected. |
 | **--no-dns53** | Disable automatic UDP DNS rewrite from `127.0.0.53:53` to `1.1.1.1:53` (enabled by default). |
 
@@ -87,28 +90,40 @@ SOCKS5 with username/password:
 sudo ./gotproxy --socks5 192.168.1.2:1080 --socks5-user alice --socks5-pass 'secret'
 ```
 
-3. TCP-only proxy:
+3. Proxy network traffic and forward via HTTP CONNECT (TCP only):
+
+```bash
+sudo ./gotproxy --http-proxy 192.168.1.2:8080
+```
+
+HTTP CONNECT with username/password:
+
+```bash
+sudo ./gotproxy --http-proxy 192.168.1.2:8080 --http-proxy-user alice --http-proxy-pass 'secret'
+```
+
+4. TCP-only proxy:
 ```bash
 sudo ./gotproxy --proto tcp
 ```
 
-4. UDP-only proxy:
+5. UDP-only proxy:
 ```bash
 sudo ./gotproxy --proto udp
 ```
 
-5. Proxy with traffic mirroring:
+6. Proxy with traffic mirroring:
 
 ```bash
 sudo ./gotproxy --proto both --mirror-enable --mirror-target 10.0.0.2:9000
 ```
 
-6. Proxy by container name:
+7. Proxy by container name:
 ```bash
 sudo ./gotproxy --container-name curl-test
 ```
 
-7. Container name and PID filters together:
+8. Container name and PID filters together:
 ```bash
 sudo ./gotproxy --container-name curl-test --pids 1234
 ```

@@ -44,9 +44,12 @@ sudo ./gotproxy [flags]
 | **--ip** | 需要代理的目标ip. 支持ipv4和ipv4 CIDR.|
 | **--p-pid** | 代理程序的进程id. 会自动过滤不代理该进程的网络通信，以免网络循环。如果没有配置, 本程序会自动启动一个转发代理服务. |
 | **--p-port** | 代理服务监听的端口。 |
-| **--socks5** | socks5代理的服务端地址，如果配置，会进行socks5代理. |
+| **--socks5** | socks5代理的服务端地址，如果配置，会进行socks5代理。与 `--http-proxy` 互斥。 |
 | **--socks5-user** | socks5 账号（RFC1929）。需要同时设置 `--socks5-pass`。 |
 | **--socks5-pass** | socks5 密码（RFC1929）。需要同时设置 `--socks5-user`。 |
+| **--http-proxy** | HTTP CONNECT 上游代理地址（仅 TCP 出站）。与 `--socks5` 互斥。 |
+| **--http-proxy-user** | HTTP 代理账号。需要同时设置 `--http-proxy-pass`。 |
+| **--http-proxy-pass** | HTTP 代理密码。需要同时设置 `--http-proxy-user`。 |
 | **--proto** | 代理协议选择：`both`（默认）/ `tcp` / `udp`。当设置为 `tcp` 时只重定向 TCP 流量；设置为 `udp` 时只重定向 UDP 流量。 |
 | **--no-dns53** | 关闭 UDP DNS 对 `127.0.0.53:53` 的自动改写。默认会自动改写为 `1.1.1.1:53`。 |
 
@@ -89,28 +92,40 @@ sudo ./gotproxy --socks5 192.168.1.2:1080
 sudo ./gotproxy --socks5 192.168.1.2:1080 --socks5-user alice --socks5-pass 'secret'
 ```
 
-3. 仅代理 TCP:
+3. 代理网络并通过 HTTP CONNECT 转发（仅 TCP）:
+
+```bash
+sudo ./gotproxy --http-proxy 192.168.1.2:8080
+```
+
+也支持带账号密码的 HTTP 上游：
+
+```bash
+sudo ./gotproxy --http-proxy 192.168.1.2:8080 --http-proxy-user alice --http-proxy-pass 'secret'
+```
+
+4. 仅代理 TCP:
 ```bash
 sudo ./gotproxy --proto tcp
 ```
 
-4. 仅代理 UDP:
+5. 仅代理 UDP:
 ```bash
 sudo ./gotproxy --proto udp
 ```
 
-5. 代理并开启流量镜像（Mirror）:
+6. 代理并开启流量镜像（Mirror）:
 
 ```bash
 sudo ./gotproxy --proto both --mirror-enable --mirror-target 10.0.0.2:9000
 ```
 
-6. 按容器名称代理:
+7. 按容器名称代理:
 ```bash
 sudo ./gotproxy --container-name curl-test
 ```
 
-7. 容器名 + pid 同时过滤:
+8. 容器名 + pid 同时过滤:
 ```bash
 sudo ./gotproxy --container-name curl-test --pids 1234
 ```

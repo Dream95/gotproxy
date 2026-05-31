@@ -278,7 +278,7 @@ func getUDPOriginalDest(clientAddr *net.UDPAddr, udpMap *ebpf.Map) (string, erro
 
 func dialUDPViaSOCKS5(targetAddr string) (net.Conn, error) {
 
-	if err := validateSocks5UpstreamConfig(); err != nil {
+	if err := validateUpstreamProxyConfig(); err != nil {
 		return nil, err
 	}
 

@@ -23,6 +23,9 @@ var (
 	socks5ProxyAddr string
 	socks5User      string
 	socks5Pass      string
+	httpProxyAddr   string
+	httpProxyUser   string
+	httpProxyPass   string
 	proto           string
 	noDNS53         bool
 	mirrorEnable    bool
@@ -41,7 +44,7 @@ var rootCmd = &cobra.Command{
 		log.Printf("gotproxy version %s", Version)
 		log.Printf("system: %s", common.SystemInfo())
 
-		if err := validateSocks5UpstreamConfig(); err != nil {
+		if err := validateUpstreamProxyConfig(); err != nil {
 			log.Fatal(err)
 		}
 
@@ -139,9 +142,12 @@ func init() {
 	rootCmd.PersistentFlags().StringSliceVar(&pids, "pids", []string{}, "The pid to be proxied, seperate by ','")
 	rootCmd.PersistentFlags().StringVar(&containerName, "container-name", "", "The container name to be proxied")
 	rootCmd.PersistentFlags().StringVar(&ipStr, "ip", "", "The ip to be proxied,only support ipv4")
-	rootCmd.PersistentFlags().StringVar(&socks5ProxyAddr, "socks5", "", "The socks5 proxyAddr.")
+	rootCmd.PersistentFlags().StringVar(&socks5ProxyAddr, "socks5", "", "The socks5 proxyAddr. Mutually exclusive with --http-proxy.")
 	rootCmd.PersistentFlags().StringVar(&socks5User, "socks5-user", "", "The SOCKS5 username. Requires --socks5-pass.")
 	rootCmd.PersistentFlags().StringVar(&socks5Pass, "socks5-pass", "", "The SOCKS5 password. Requires --socks5-user.")
+	rootCmd.PersistentFlags().StringVar(&httpProxyAddr, "http-proxy", "", "The HTTP CONNECT proxy address for TCP upstream. Mutually exclusive with --socks5.")
+	rootCmd.PersistentFlags().StringVar(&httpProxyUser, "http-proxy-user", "", "The HTTP proxy username. Requires --http-proxy-pass.")
+	rootCmd.PersistentFlags().StringVar(&httpProxyPass, "http-proxy-pass", "", "The HTTP proxy password. Requires --http-proxy-user.")
 	rootCmd.PersistentFlags().StringVar(&proto, "proto", "both", "Proxy protocol: both|tcp|udp")
 	rootCmd.PersistentFlags().BoolVar(&noDNS53, "no-dns53", false, "Disable UDP DNS destination rewrite from 127.0.0.53:53 to 1.1.1.1:53")
 	rootCmd.PersistentFlags().BoolVar(&mirrorEnable, "mirror-enable", false, "Enable traffic mirroring")

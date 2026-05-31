@@ -223,8 +223,18 @@ func getTargetConnection(conn net.Conn) (net.Conn, error) {
 
 	log.Printf("TCP Source: %s:%s -> Original destination: %s:%d", sourceIP, sourcePort, targetAddr, targetPort)
 
+	target := fmt.Sprintf("%s:%d", targetAddr, targetPort)
+
+	if httpProxyAddr != "" {
+		targetConn, err := dialViaHTTPConnect(httpProxyAddr, target)
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect via HTTP CONNECT: %w", err)
+		}
+		return targetConn, nil
+	}
+
 	if socks5ProxyAddr == "" {
-		targetConn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", targetAddr, targetPort), 5*time.Second)
+		targetConn, err := net.DialTimeout("tcp", target, 5*time.Second)
 		if err != nil {
 			return nil, fmt.Errorf("failed to connect to destination: %w", err)
 		}
@@ -241,7 +251,7 @@ func getTargetConnection(conn net.Conn) (net.Conn, error) {
 		return nil, fmt.Errorf("cannot create SOCKS5 dialer: %w", err)
 	}
 
-	targetConn, err := dialer.Dial("tcp", fmt.Sprintf("%s:%d", targetAddr, targetPort))
+	targetConn, err := dialer.Dial("tcp", target)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect via SOCKS5: %w", err)
 	}
