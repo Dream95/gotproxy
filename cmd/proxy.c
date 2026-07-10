@@ -38,11 +38,34 @@ struct Config {
   char command[TASK_COMM_LEN];
 };
 
+enum match_flags {
+  MATCH_CMD       = 1 << 0,
+  MATCH_PID       = 1 << 1,
+  MATCH_PGID      = 1 << 2,
+  MATCH_CONTAINER = 1 << 3,
+  MATCH_TRACKED   = 1 << 4,
+};
+
+/* Connection metadata for userspace routing (fixed-size, map-friendly). */
+struct ConnMeta {
+  __u32 pid;
+  __u32 tgid;
+  __u32 pgid;
+  __u32 pidns_inum;
+  __u32 mntns_inum;
+  __u32 netns_inum;
+  __u32 match_flags;
+  char  comm[TASK_COMM_LEN];
+};
+
 struct Socket {
   __u32 src_addr;
   __u16 src_port;
+  __u16 pad0;
   __u32 dst_addr;
   __u16 dst_port;
+  __u16 pad1;
+  struct ConnMeta meta;
 };
 
 struct PortKey {
@@ -114,11 +137,12 @@ struct UdpDestKey {
   __u16 pad;
 };
 
-// Value: original destination that was redirected to proxy
+// Value: original destination + ConnMeta for userspace routing
 struct UdpDestVal {
   __u32 dst_ip;
   __u16 dst_port;
   __u16 pad;
+  struct ConnMeta meta;
 };
 
 struct {
@@ -157,18 +181,25 @@ get_current_pgid(void)
   return BPF_CORE_READ(pgid_pid, numbers[0].nr);
 }
 
-static __always_inline bool
-match_container_ns(void)
+static __always_inline void
+read_current_ns(__u32 *pidns_inum, __u32 *mntns_inum, __u32 *netns_inum)
 {
+  *pidns_inum = 0;
+  *mntns_inum = 0;
+  *netns_inum = 0;
+
   struct task_struct *task = (struct task_struct *)bpf_get_current_task_btf();
-  if (!task) {
-    return false;
-  }
+  if (!task)
+    return;
 
-  __u32 pidns_id = BPF_CORE_READ(task, nsproxy, pid_ns_for_children, ns.inum);
-  __u32 mntns_id = BPF_CORE_READ(task, nsproxy, mnt_ns, ns.inum);
-  __u32 netns_id = BPF_CORE_READ(task, nsproxy, net_ns, ns.inum);
+  *pidns_inum = BPF_CORE_READ(task, nsproxy, pid_ns_for_children, ns.inum);
+  *mntns_inum = BPF_CORE_READ(task, nsproxy, mnt_ns, ns.inum);
+  *netns_inum = BPF_CORE_READ(task, nsproxy, net_ns, ns.inum);
+}
 
+static __always_inline bool
+match_container_ns(__u32 pidns_id, __u32 mntns_id, __u32 netns_id)
+{
   if (pidns_id && bpf_map_lookup_elem(&filter_pidns_map, &pidns_id)) {
     return true;
   }
@@ -180,6 +211,19 @@ match_container_ns(void)
   }
 
   return false;
+}
+
+static __always_inline void
+fill_conn_meta(struct ConnMeta *meta, __u32 match_flags)
+{
+  __u64 pid_tgid = bpf_get_current_pid_tgid();
+  __builtin_memset(meta, 0, sizeof(*meta));
+  meta->tgid = pid_tgid >> 32;
+  meta->pid = (__u32)pid_tgid;
+  meta->pgid = get_current_pgid();
+  meta->match_flags = match_flags;
+  bpf_get_current_comm(meta->comm, sizeof(meta->comm));
+  read_current_ns(&meta->pidns_inum, &meta->mntns_inum, &meta->netns_inum);
 }
 
 static __always_inline bool
@@ -213,20 +257,24 @@ track_pid(__u32 pid)
   bpf_map_update_elem(&filter_tracked_map, &pid, &val, BPF_ANY);
 }
 
+/* Returns whether the current process should be redirected; out_flags records why. */
 static __always_inline bool
-match_process(struct Config *conf)
+match_process(struct Config *conf, __u32 *out_flags)
 {
+  __u32 flags = 0;
   bool has_cmd = conf->command[0] != '\0';
   bool has_pid_filter = conf->filter_by_pid || conf->filter_by_pgid;
   bool has_container_filter = conf->filter_by_container;
 
   if (!has_cmd && !has_pid_filter && !has_container_filter) {
+    *out_flags = 0;
     return true;
   }
 
   bool cmd_matched = false;
   bool tracked_matched = false;
   bool pid_matched = false;
+  bool pgid_matched = false;
   bool container_matched = false;
 
   if (has_cmd) {
@@ -261,17 +309,32 @@ match_process(struct Config *conf)
   if (has_pid_filter && !pid_matched && conf->filter_by_pgid) {
     __u32 current_pgid = get_current_pgid();
     if (current_pgid && bpf_map_lookup_elem(&filter_pid_map, &current_pgid)) {
-      pid_matched = true;
+      pgid_matched = true;
     }
   }
 
   if (has_container_filter) {
-    container_matched = match_container_ns();
+    __u32 pidns_id = 0, mntns_id = 0, netns_id = 0;
+    read_current_ns(&pidns_id, &mntns_id, &netns_id);
+    container_matched = match_container_ns(pidns_id, mntns_id, netns_id);
   }
+
+  if (cmd_matched)
+    flags |= MATCH_CMD;
+  if (tracked_matched)
+    flags |= MATCH_TRACKED;
+  if (pid_matched)
+    flags |= MATCH_PID;
+  if (pgid_matched)
+    flags |= MATCH_PGID;
+  if (container_matched)
+    flags |= MATCH_CONTAINER;
+
+  *out_flags = flags;
 
   if ((has_container_filter && container_matched) ||
       (has_cmd && (cmd_matched || tracked_matched)) ||
-      (has_pid_filter && pid_matched)) {
+      (has_pid_filter && (pid_matched || pgid_matched))) {
     return true;
   }
   return false;
@@ -371,7 +434,8 @@ int cg_connect4(struct bpf_sock_addr *ctx) {
   }
   if (current_pid == conf->proxy_pid) return 1;
 
-  if (!match_process(conf))
+  __u32 match_flags = 0;
+  if (!match_process(conf, &match_flags))
     return 1;
 
   if (conf->filter_ip)
@@ -388,6 +452,9 @@ int cg_connect4(struct bpf_sock_addr *ctx) {
   if (dst_addr == conf->proxy_ip && dst_port == conf->proxy_port)
     return 1;
 
+  struct ConnMeta meta;
+  fill_conn_meta(&meta, match_flags);
+
   if (ctx->protocol == IPPROTO_TCP) {
     if (!conf->enable_tcp) return 1;
     __u64 cookie = bpf_get_socket_cookie(ctx);
@@ -395,12 +462,13 @@ int cg_connect4(struct bpf_sock_addr *ctx) {
     __builtin_memset(&sock, 0, sizeof(sock));
     sock.dst_addr = dst_addr;
     sock.dst_port = dst_port;
+    sock.meta = meta;
     bpf_map_update_elem(&map_socks, &cookie, &sock, 0);
 
     ctx->user_ip4 = bpf_htonl(conf->proxy_ip);
     ctx->user_port = bpf_htonl(conf->proxy_port << 16);
-    BPF_LOG_DEBUG("connect4: tcp redirect dst=%x:%u -> proxy=%x:%u pid=%u\n",
-                  dst_addr, dst_port, conf->proxy_ip, conf->proxy_port, current_pid);
+    BPF_LOG_DEBUG("connect4: tcp redirect dst=%x:%u -> proxy=%x:%u pid=%u flags=%u\n",
+                  dst_addr, dst_port, conf->proxy_ip, conf->proxy_port, current_pid, match_flags);
     return 1;
   }
 
@@ -453,12 +521,13 @@ int cg_connect4(struct bpf_sock_addr *ctx) {
   __builtin_memset(&dval, 0, sizeof(dval));
   dval.dst_ip   = dst_addr;
   dval.dst_port = dst_port;
+  dval.meta     = meta;
   bpf_map_update_elem(&map_udp_dest, &dkey, &dval, 0);
 
   ctx->user_ip4  = bpf_htonl(conf->proxy_ip);
   ctx->user_port = bpf_htonl(conf->proxy_port << 16);
-  BPF_LOG_DEBUG("connect4: udp redirect dst=%x:%u src_port=%u proxy=%x:%u pid=%u\n",
-                dst_addr, dst_port, src_port, conf->proxy_ip, conf->proxy_port, current_pid);
+  BPF_LOG_DEBUG("connect4: udp redirect dst=%x:%u src_port=%u proxy=%x:%u pid=%u flags=%u\n",
+                dst_addr, dst_port, src_port, conf->proxy_ip, conf->proxy_port, current_pid, match_flags);
   return 1;
 }
 

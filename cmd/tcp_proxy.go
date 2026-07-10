@@ -18,7 +18,7 @@ import (
 )
 
 // StartProxy starts TCP/UDP proxy on proxyPort based on enableTCP/enableUDP.
-func StartProxy(udpMap *ebpf.Map, enableTCP bool, enableUDP bool, listenHost string, mirrorOpts MirrorOptions) {
+func StartProxy(udpMap, portsMap, socksMap *ebpf.Map, enableTCP bool, enableUDP bool, listenHost string, mirrorOpts MirrorOptions) {
 	proxyAddr := fmt.Sprintf("%s:%d", listenHost, proxyPort)
 	mirror := NewMirrorDispatcher(mirrorOpts)
 	if mirror != nil && strings.TrimSpace(mirrorOpts.Target) == proxyAddr {
@@ -36,7 +36,7 @@ func StartProxy(udpMap *ebpf.Map, enableTCP bool, enableUDP bool, listenHost str
 			log.Fatalf("Failed to start TCP proxy server: %v", err)
 		}
 		log.Printf("TCP proxy server with PID %d listening on %s", os.Getpid(), proxyAddr)
-		go acceptLoop(listener, mirror)
+		go acceptLoop(listener, mirror, portsMap, socksMap)
 	}
 
 	if enableUDP && udpMap != nil {
@@ -45,7 +45,7 @@ func StartProxy(udpMap *ebpf.Map, enableTCP bool, enableUDP bool, listenHost str
 	}
 }
 
-func acceptLoop(listener net.Listener, mirror *MirrorDispatcher) {
+func acceptLoop(listener net.Listener, mirror *MirrorDispatcher, portsMap, socksMap *ebpf.Map) {
 	defer listener.Close()
 	for {
 		conn, err := listener.Accept()
@@ -54,7 +54,7 @@ func acceptLoop(listener net.Listener, mirror *MirrorDispatcher) {
 			continue
 		}
 
-		go handleConnection(conn, mirror)
+		go handleConnection(conn, mirror, portsMap, socksMap)
 	}
 }
 
@@ -66,10 +66,10 @@ func getsockopt(s int, level int, optname int, optval unsafe.Pointer, optlen *ui
 	return
 }
 
-func handleConnection(conn net.Conn, mirror *MirrorDispatcher) {
+func handleConnection(conn net.Conn, mirror *MirrorDispatcher, portsMap, socksMap *ebpf.Map) {
 	defer conn.Close()
 
-	targetConn, err := getTargetConnection(conn)
+	targetConn, err := getTargetConnection(conn, portsMap, socksMap)
 	if err != nil {
 		log.Printf("Connection error: %v", err)
 		return
@@ -189,31 +189,7 @@ func isExpectedCopyError(err error) bool {
 	return false
 }
 
-func getTargetConnection(conn net.Conn) (net.Conn, error) {
-
-	// Using RawConn is necessary to perform low-level operations on the underlying socket file descriptor in Go.
-	// This allows us to use getsockopt to retrieve the original destination address set by the SO_ORIGINAL_DST option,
-	// which isn't directly accessible through Go's higher-level networking API.
-	rawConn, err := conn.(*net.TCPConn).SyscallConn()
-	if err != nil {
-		log.Printf("Failed to get raw connection: %v", err)
-		return nil, err
-	}
-
-	var originalDst SockAddrIn
-	// If Control is not nil, it is called after creating the network connection but before binding it to the operating system.
-	rawConn.Control(func(fd uintptr) {
-		optlen := uint32(unsafe.Sizeof(originalDst))
-		// Retrieve the original destination address by making a syscall with the SO_ORIGINAL_DST option.
-		err = getsockopt(int(fd), syscall.SOL_IP, SO_ORIGINAL_DST, unsafe.Pointer(&originalDst), &optlen)
-		if err != nil {
-			log.Printf("getsockopt SO_ORIGINAL_DST failed: %v", err)
-		}
-	})
-
-	targetAddr := net.IPv4(originalDst.SinAddr[0], originalDst.SinAddr[1], originalDst.SinAddr[2], originalDst.SinAddr[3]).String()
-	targetPort := (uint16(originalDst.SinPort[0]) << 8) | uint16(originalDst.SinPort[1])
-
+func getTargetConnection(conn net.Conn, portsMap, socksMap *ebpf.Map) (net.Conn, error) {
 	sourceAddr := conn.RemoteAddr().String()
 	sourceIP, sourcePort, splitErr := net.SplitHostPort(sourceAddr)
 	if splitErr != nil {
@@ -221,9 +197,42 @@ func getTargetConnection(conn net.Conn) (net.Conn, error) {
 		sourcePort = "unknown"
 	}
 
-	log.Printf("TCP Source: %s:%s -> Original destination: %s:%d", sourceIP, sourcePort, targetAddr, targetPort)
+	var target string
+	if meta, err := lookupTCPConnMeta(conn.RemoteAddr(), portsMap, socksMap); err == nil {
+		target = meta.TargetAddr()
+		log.Printf("TCP Source: %s:%s -> Original destination: %s meta={%s}", sourceIP, sourcePort, target, meta)
+	} else {
+		// Fallback: SO_ORIGINAL_DST restores destination; also retries map
+		// lookup afterward in case sockops had not yet populated map_ports.
+		rawConn, rawErr := conn.(*net.TCPConn).SyscallConn()
+		if rawErr != nil {
+			log.Printf("Failed to get raw connection: %v", rawErr)
+			return nil, rawErr
+		}
 
-	target := fmt.Sprintf("%s:%d", targetAddr, targetPort)
+		var originalDst SockAddrIn
+		var sockErr error
+		rawConn.Control(func(fd uintptr) {
+			optlen := uint32(unsafe.Sizeof(originalDst))
+			sockErr = getsockopt(int(fd), syscall.SOL_IP, SO_ORIGINAL_DST, unsafe.Pointer(&originalDst), &optlen)
+		})
+		if sockErr != nil {
+			log.Printf("getsockopt SO_ORIGINAL_DST failed: %v (map lookup: %v)", sockErr, err)
+			return nil, sockErr
+		}
+
+		targetAddr := net.IPv4(originalDst.SinAddr[0], originalDst.SinAddr[1], originalDst.SinAddr[2], originalDst.SinAddr[3]).String()
+		targetPort := (uint16(originalDst.SinPort[0]) << 8) | uint16(originalDst.SinPort[1])
+		target = fmt.Sprintf("%s:%d", targetAddr, targetPort)
+
+		if meta, retryErr := lookupTCPConnMeta(conn.RemoteAddr(), portsMap, socksMap); retryErr == nil {
+			target = meta.TargetAddr()
+			log.Printf("TCP Source: %s:%s -> Original destination: %s meta={%s}", sourceIP, sourcePort, target, meta)
+		} else {
+			log.Printf("TCP Source: %s:%s -> Original destination: %s (SO_ORIGINAL_DST fallback, map err: %v)",
+				sourceIP, sourcePort, target, err)
+		}
+	}
 
 	if httpProxyAddr != "" {
 		targetConn, err := dialViaHTTPConnect(httpProxyAddr, target)

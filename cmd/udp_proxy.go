@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"log"
@@ -108,13 +107,13 @@ func (m *udpSessionManager) dispatch(clientAddr *net.UDPAddr, payload []byte) {
 }
 
 func (m *udpSessionManager) createSession(clientAddr *net.UDPAddr) (*udpSession, error) {
-	targetAddr, err := getUDPOriginalDest(clientAddr, m.udpMap)
+	meta, err := lookupUDPConnMeta(clientAddr, m.udpMap)
 	if err != nil {
 		log.Printf("UDP proxy: lookup original dest for %s: %v", clientAddr, err)
 		return nil, err
 	}
-	targetAddr = maybeRewriteLocalDNSStub(targetAddr)
-	log.Printf("UDP Original destination: %s", targetAddr)
+	targetAddr := maybeRewriteLocalDNSStub(meta.TargetAddr())
+	log.Printf("UDP Original destination: %s meta={%s}", targetAddr, meta)
 
 	var remoteConn net.Conn
 	if socks5ProxyAddr == "" {
@@ -252,28 +251,14 @@ func maybeRewriteLocalDNSStub(targetAddr string) string {
 	return publicDNSAddr
 }
 
-// getUDPOriginalDest looks up the BPF map with key (clientIP, clientPort) and returns "ip:port".
-// BPF stores: key src_ip (network order), src_port (host); value dst_ip (network order), dst_port (host).
+// getUDPOriginalDest looks up the BPF map and returns "ip:port".
+// Prefer lookupUDPConnMeta when ConnMeta is needed.
 func getUDPOriginalDest(clientAddr *net.UDPAddr, udpMap *ebpf.Map) (string, error) {
-	ip4 := clientAddr.IP.To4()
-	if ip4 == nil {
-		return "", fmt.Errorf("not IPv4")
+	meta, err := lookupUDPConnMeta(clientAddr, udpMap)
+	if err != nil {
+		return "", err
 	}
-	key := proxyUdpDestKey{
-		SrcIp:   binary.BigEndian.Uint32(ip4),
-		SrcPort: uint16(clientAddr.Port),
-	}
-	var val proxyUdpDestVal
-	if err := udpMap.Lookup(&key, &val); err != nil {
-		// Fallback entry keyed only by source port for container/bridge paths.
-		key.SrcIp = 0
-		if err := udpMap.Lookup(&key, &val); err != nil {
-			return "", err
-		}
-	}
-	// DstIp is network order (big-endian), DstPort is host order
-	targetIP := net.IPv4(byte(val.DstIp>>24), byte(val.DstIp>>16), byte(val.DstIp>>8), byte(val.DstIp))
-	return fmt.Sprintf("%s:%d", targetIP.String(), val.DstPort), nil
+	return meta.TargetAddr(), nil
 }
 
 func dialUDPViaSOCKS5(targetAddr string) (net.Conn, error) {
