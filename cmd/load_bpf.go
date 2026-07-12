@@ -12,7 +12,7 @@ import (
 	"github.com/cilium/ebpf/rlimit"
 )
 
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cflags "-D ARCH_$TARGET" -target $TARGET  -type Config proxy proxy.c -- -I../.output/ -I../libbpf/include/uapi -I../vmlinux/$TARGET
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cflags "-D ARCH_$TARGET" -target $TARGET -type Config -type ConnMeta -type Socket -type UdpDestVal -type PortKey -type UdpDestKey proxy proxy.c -- -I../.output/ -I../libbpf/include/uapi -I../vmlinux/$TARGET
 
 const (
 	CGROUP_PATH     = "/sys/fs/cgroup" // Root cgroup path
@@ -85,9 +85,9 @@ func LoadBpf(options *Options) {
 			byte(proxyRedirectIP))
 	}
 
-	// Start TCP (and UDP) proxy so it can use objs.MapUdpDest for UDP original-dest lookup
+	// Start TCP (and UDP) proxy so it can use BPF maps for original-dest / ConnMeta lookup
 	if options.ProxyPid == 0 {
-		StartProxy(objs.MapUdpDest, options.EnableTCP, options.EnableUDP, proxyListenHost, options.Mirror)
+		StartProxy(objs.MapUdpDest, objs.MapPorts, objs.MapSocks, options.EnableTCP, options.EnableUDP, proxyListenHost, options.Mirror)
 	}
 
 	// Attach eBPF programs to the root cgroup

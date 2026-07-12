@@ -31,6 +31,18 @@ type proxyConfig struct {
 	_                 [1]byte
 }
 
+type proxyConnMeta struct {
+	_          structs.HostLayout
+	Pid        uint32
+	Tgid       uint32
+	Pgid       uint32
+	PidnsInum  uint32
+	MntnsInum  uint32
+	NetnsInum  uint32
+	MatchFlags uint32
+	Comm       [16]int8
+}
+
 type proxyPortKey struct {
 	_       structs.HostLayout
 	SrcIp   uint32
@@ -42,10 +54,11 @@ type proxySocket struct {
 	_       structs.HostLayout
 	SrcAddr uint32
 	SrcPort uint16
-	_       [2]byte
+	Pad0    uint16
 	DstAddr uint32
 	DstPort uint16
-	_       [2]byte
+	Pad1    uint16
+	Meta    proxyConnMeta
 }
 
 type proxyUdpDestKey struct {
@@ -60,6 +73,7 @@ type proxyUdpDestVal struct {
 	DstIp   uint32
 	DstPort uint16
 	Pad     uint16
+	Meta    proxyConnMeta
 }
 
 // loadProxy returns the embedded CollectionSpec for proxy.
