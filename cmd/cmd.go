@@ -114,8 +114,7 @@ var rootCmd = &cobra.Command{
 		for _, pid := range pids {
 			pidInt, err := strconv.ParseUint(pid, 10, 64)
 			if err != nil {
-				fmt.Println("Invalid pid:", pid)
-				continue
+				log.Fatalf("Invalid pid %q: %v", pid, err)
 			}
 			Options.Pids = append(Options.Pids, pidInt)
 		}
