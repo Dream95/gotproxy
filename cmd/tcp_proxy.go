@@ -77,7 +77,7 @@ func handleConnection(conn net.Conn, mirror *MirrorDispatcher, portsMap, socksMa
 	defer targetConn.Close()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
+	wg.Add(2)
 	go func() {
 		defer wg.Done()
 		_, copyErr := copyWithMirror(targetConn, conn, func(chunk []byte) {
@@ -85,14 +85,19 @@ func handleConnection(conn net.Conn, mirror *MirrorDispatcher, portsMap, socksMa
 				mirror.Enqueue("tcp", chunk)
 			}
 		})
-		if copyErr != nil && copyErr != io.EOF {
+		closeWrite(targetConn)
+		if copyErr != nil && !isExpectedCopyError(copyErr) {
 			log.Printf("Failed copying data to target: %v", copyErr)
 		}
 	}()
-	_, err = copyWithMirror(conn, targetConn, nil)
-	if err != nil {
-		log.Printf("Failed copying data from target: %v", err)
-	}
+	go func() {
+		defer wg.Done()
+		_, copyErr := copyWithMirror(conn, targetConn, nil)
+		closeWrite(conn)
+		if copyErr != nil && !isExpectedCopyError(copyErr) {
+			log.Printf("Failed copying data from target: %v", copyErr)
+		}
+	}()
 	wg.Wait()
 }
 
@@ -134,36 +139,10 @@ type closeWriter interface {
 	CloseWrite() error
 }
 
-func proxyBidirectional(a net.Conn, b net.Conn) error {
-	errCh := make(chan error, 2)
-
-	// a -> b
-	go func() {
-		_, err := io.Copy(b, a)
-		// Signal to the other direction that no more data will be sent to b.
-		if cw, ok := b.(closeWriter); ok {
-			_ = cw.CloseWrite()
-		}
-		errCh <- err
-	}()
-
-	// b -> a
-	go func() {
-		_, err := io.Copy(a, b)
-		if cw, ok := a.(closeWriter); ok {
-			_ = cw.CloseWrite()
-		}
-		errCh <- err
-	}()
-
-	// Wait for both directions to complete; return first non-nil error.
-	var firstErr error
-	for range 2 {
-		if err := <-errCh; err != nil && firstErr == nil {
-			firstErr = err
-		}
+func closeWrite(c net.Conn) {
+	if cw, ok := c.(closeWriter); ok {
+		_ = cw.CloseWrite()
 	}
-	return firstErr
 }
 
 func isExpectedCopyError(err error) bool {
