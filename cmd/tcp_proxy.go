@@ -18,7 +18,7 @@ import (
 )
 
 // StartProxy starts TCP/UDP proxy on proxyPort based on enableTCP/enableUDP.
-func StartProxy(udpMap, portsMap, socksMap *ebpf.Map, enableTCP bool, enableUDP bool, listenHost string, mirrorOpts MirrorOptions) {
+func StartProxy(udpMap, portsMap, socksMap *ebpf.Map, enableTCP bool, enableUDP bool, listenHost string, proxyPort uint16, mirrorOpts MirrorOptions) {
 	proxyAddr := fmt.Sprintf("%s:%d", listenHost, proxyPort)
 	mirror := NewMirrorDispatcher(mirrorOpts)
 	if mirror != nil && strings.TrimSpace(mirrorOpts.Target) == proxyAddr {

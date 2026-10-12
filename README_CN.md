@@ -43,7 +43,7 @@ sudo ./gotproxy [flags]
 | **--container-name** | 需要代理的容器名称（Docker 运行中的容器名）。 |
 | **--ip** | 需要代理的目标ip. 支持ipv4和ipv4 CIDR.|
 | **--p-pid** | 代理程序的进程id. 会自动过滤不代理该进程的网络通信，以免网络循环。如果没有配置, 本程序会自动启动一个转发代理服务. |
-| **--p-port** | 代理服务监听的端口。 |
+| **--p-port** | 代理服务监听的端口（默认 18000）。未显式配置时，若默认端口被占用会自动改用随机高位端口。 |
 | **--socks5** | socks5代理的服务端地址，如果配置，会进行socks5代理。与 `--http-proxy` 互斥。 |
 | **--socks5-user** | socks5 账号（RFC1929）。需要同时设置 `--socks5-pass`。 |
 | **--socks5-pass** | socks5 密码（RFC1929）。需要同时设置 `--socks5-user`。 |

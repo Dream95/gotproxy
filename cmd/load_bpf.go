@@ -65,10 +65,9 @@ func LoadBpf(options *Options) {
 	}
 	log.Printf("Proxy protocol enabled: %s (tcp=%v udp=%v)", mode, options.EnableTCP, options.EnableUDP)
 
-	proxyListenHost := "127.0.0.1"
+	proxyListenHost := listenHostFor(options.ContainerName)
 	proxyRedirectIP := uint32(0x7f000001)
 	if options.ContainerName != "" {
-		proxyListenHost = "0.0.0.0"
 		gatewayIP, err := common.ResolveDockerBridgeGatewayIPv4(context.Background())
 		if err != nil {
 			// Fallback to Docker default bridge gateway for compatibility with typical setups.
@@ -87,7 +86,7 @@ func LoadBpf(options *Options) {
 
 	// Start TCP (and UDP) proxy so it can use BPF maps for original-dest / ConnMeta lookup
 	if options.ProxyPid == 0 {
-		StartProxy(objs.MapUdpDest, objs.MapPorts, objs.MapSocks, options.EnableTCP, options.EnableUDP, proxyListenHost, options.Mirror)
+		StartProxy(objs.MapUdpDest, objs.MapPorts, objs.MapSocks, options.EnableTCP, options.EnableUDP, proxyListenHost, options.ProxyPort, options.Mirror)
 	}
 
 	// Attach eBPF programs to the root cgroup

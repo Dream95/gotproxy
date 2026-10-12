@@ -43,7 +43,7 @@ sudo ./gotproxy [flags]
 | **--container-name** | Container name to proxy (Docker running container name). |
 | **--ip** | Target IP address to proxy. Supports IPv4 and IPv4 CIDR notation. |
 | **--p-pid** | Process ID of the proxy program. Traffic from this process is excluded to avoid proxy loops. If not set, the program starts a forwarding proxy automatically. |
-| **--p-port** | Port the proxy listens on. |
+| **--p-port** | Port the proxy listens on (default 18000). When not set explicitly and the default port is occupied, a random high port is used instead. |
 | **--socks5** | SOCKS5 upstream address. When set, SOCKS5 proxying is used. Mutually exclusive with `--http-proxy`. |
 | **--socks5-user** | SOCKS5 username (RFC1929). Must be set together with `--socks5-pass`. |
 | **--socks5-pass** | SOCKS5 password (RFC1929). Must be set together with `--socks5-user`. |

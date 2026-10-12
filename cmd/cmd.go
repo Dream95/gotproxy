@@ -78,11 +78,20 @@ var rootCmd = &cobra.Command{
 			log.Fatalf("Invalid --mirror-queue value %d, expected > 0", mirrorQueue)
 		}
 
+		resolvedPort := proxyPort
+		if proxyPid == 0 && !cmd.Flags().Changed("p-port") {
+			var err error
+			resolvedPort, err = resolveProxyPort(proxyPort, listenHostFor(containerName), enableTCP, enableUDP)
+			if err != nil {
+				log.Fatalf("Resolve proxy port failed: %v", err)
+			}
+		}
+
 		Options := &Options{
 			Command:       command,
 			FollowForks:   followForks,
 			ProxyPid:      proxyPid,
-			ProxyPort:     proxyPort,
+			ProxyPort:     resolvedPort,
 			ContainerName: containerName,
 			EnableTCP:     enableTCP,
 			EnableUDP:     enableUDP,
@@ -136,7 +145,7 @@ func main() {
 func init() {
 	rootCmd.PersistentFlags().StringVar(&command, "cmd", "", "The command to be proxied. If not provided, all traffic will be proxied globally.")
 	rootCmd.PersistentFlags().BoolVar(&followForks, "follow-forks", true, "Track child processes forked from --cmd matches (including after execve). Set false for legacy comm-only matching.")
-	rootCmd.PersistentFlags().Uint16Var(&proxyPort, "p-port", 18000, "The proxy port")
+	rootCmd.PersistentFlags().Uint16Var(&proxyPort, "p-port", DefaultProxyPort, "The proxy port. When not set explicitly, falls back to a random high port if the default port is occupied")
 	rootCmd.PersistentFlags().Uint64Var(&proxyPid, "p-pid", 0, "The process ID of the proxy. If not provided, the program will automatically start a forwarding proxy.")
 	rootCmd.PersistentFlags().StringSliceVar(&pids, "pids", []string{}, "The pid to be proxied, seperate by ','")
 	rootCmd.PersistentFlags().StringVar(&containerName, "container-name", "", "The container name to be proxied")
