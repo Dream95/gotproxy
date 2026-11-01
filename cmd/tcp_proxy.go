@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -36,7 +37,7 @@ func StartProxy(udpMap, portsMap, socksMap *ebpf.Map, enableTCP bool, enableUDP 
 			log.Fatalf("Failed to start TCP proxy server: %v", err)
 		}
 		log.Printf("TCP proxy server with PID %d listening on %s", os.Getpid(), proxyAddr)
-		go acceptLoop(listener, mirror, portsMap, socksMap)
+		go acceptLoop(listener, mirror, portsMap, socksMap, listenHost, proxyPort)
 	}
 
 	if enableUDP && udpMap != nil {
@@ -45,7 +46,7 @@ func StartProxy(udpMap, portsMap, socksMap *ebpf.Map, enableTCP bool, enableUDP 
 	}
 }
 
-func acceptLoop(listener net.Listener, mirror *MirrorDispatcher, portsMap, socksMap *ebpf.Map) {
+func acceptLoop(listener net.Listener, mirror *MirrorDispatcher, portsMap, socksMap *ebpf.Map, listenHost string, proxyPort uint16) {
 	defer listener.Close()
 	for {
 		conn, err := listener.Accept()
@@ -54,7 +55,7 @@ func acceptLoop(listener net.Listener, mirror *MirrorDispatcher, portsMap, socks
 			continue
 		}
 
-		go handleConnection(conn, mirror, portsMap, socksMap)
+		go handleConnection(conn, mirror, portsMap, socksMap, listenHost, proxyPort)
 	}
 }
 
@@ -66,10 +67,10 @@ func getsockopt(s int, level int, optname int, optval unsafe.Pointer, optlen *ui
 	return
 }
 
-func handleConnection(conn net.Conn, mirror *MirrorDispatcher, portsMap, socksMap *ebpf.Map) {
+func handleConnection(conn net.Conn, mirror *MirrorDispatcher, portsMap, socksMap *ebpf.Map, listenHost string, proxyPort uint16) {
 	defer conn.Close()
 
-	targetConn, err := getTargetConnection(conn, portsMap, socksMap)
+	targetConn, err := getTargetConnection(conn, portsMap, socksMap, listenHost, proxyPort)
 	if err != nil {
 		log.Printf("Connection error: %v", err)
 		return
@@ -168,7 +169,89 @@ func isExpectedCopyError(err error) bool {
 	return false
 }
 
-func getTargetConnection(conn net.Conn, portsMap, socksMap *ebpf.Map) (net.Conn, error) {
+// localIPv4s lists IPv4 addresses assigned to local interfaces.
+// Tests replace it to avoid depending on the host's interfaces.
+var localIPv4s = listLocalIPv4
+
+func listLocalIPv4() ([]net.IP, error) {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil, err
+	}
+	var out []net.IP
+	for _, addr := range addrs {
+		ipNet, ok := addr.(*net.IPNet)
+		if !ok || ipNet.IP == nil {
+			continue
+		}
+		ip4 := ipNet.IP.To4()
+		if ip4 == nil {
+			continue
+		}
+		out = append(out, ip4)
+	}
+	return out, nil
+}
+
+func isProxySelfTarget(target string, localAddr net.Addr, listenHost string, listenPort uint16) bool {
+	ip, port, ok := splitIPv4Target(target)
+	if !ok || port != listenPort {
+		return false
+	}
+	if localIP, localPort, ok := splitIPv4Target(addrString(localAddr)); ok && localPort == listenPort && localIP.Equal(ip) {
+		return true
+	}
+	return ipHitsListener(ip, listenHost)
+}
+
+func addrString(addr net.Addr) string {
+	if addr == nil {
+		return ""
+	}
+	return addr.String()
+}
+
+func splitIPv4Target(hostport string) (net.IP, uint16, bool) {
+	host, portStr, err := net.SplitHostPort(hostport)
+	if err != nil {
+		return nil, 0, false
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil || port <= 0 || port > 65535 {
+		return nil, 0, false
+	}
+	ip := net.ParseIP(host).To4()
+	if ip == nil {
+		return nil, 0, false
+	}
+	return ip, uint16(port), true
+}
+
+func ipHitsListener(ip net.IP, listenHost string) bool {
+	listenIP := net.ParseIP(listenHost).To4()
+	if listenIP == nil {
+		return false
+	}
+	if !listenIP.IsUnspecified() {
+		return listenIP.Equal(ip)
+	}
+	if ip.IsLoopback() || ip.IsUnspecified() {
+		return true
+	}
+	locals, err := localIPv4s()
+	if err != nil {
+		log.Printf("proxy self-target check: list local addresses: %v", err)
+		return false
+	}
+	for _, local := range locals {
+		if local.Equal(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+func getTargetConnection(conn net.Conn, portsMap, socksMap *ebpf.Map, listenHost string, proxyPort uint16) (net.Conn, error) {
 	sourceAddr := conn.RemoteAddr().String()
 	sourceIP, sourcePort, splitErr := net.SplitHostPort(sourceAddr)
 	if splitErr != nil {
@@ -211,6 +294,10 @@ func getTargetConnection(conn net.Conn, portsMap, socksMap *ebpf.Map) (net.Conn,
 			log.Printf("TCP Source: %s:%s -> Original destination: %s (SO_ORIGINAL_DST fallback, map err: %v)",
 				sourceIP, sourcePort, target, err)
 		}
+	}
+
+	if isProxySelfTarget(target, conn.LocalAddr(), listenHost, proxyPort) {
+		return nil, fmt.Errorf("refusing to dial %s: target is the proxy listener", target)
 	}
 
 	if httpProxyAddr != "" {
