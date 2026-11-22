@@ -40,9 +40,20 @@ func StartProxy(udpMap, portsMap, socksMap *ebpf.Map, enableTCP bool, enableUDP 
 		go acceptLoop(listener, mirror, portsMap, socksMap, listenHost, proxyPort)
 	}
 
-	if enableUDP && udpMap != nil {
-		go StartUDPProxy(proxyAddr, udpMap, mirror)
-		log.Printf("UDP proxy server with PID %d listening on %s", os.Getpid(), proxyAddr)
+	if enableUDP {
+		if udpMap == nil {
+			log.Printf("UDP proxy not started: original-destination BPF map is unavailable")
+		} else {
+			udpConn, err := listenUDPProxy(listenHost, proxyPort)
+			if err != nil {
+				// Exiting is intentional: the BPF redirect is about to send every
+				// proxied UDP flow to this port, so running without a listener
+				// would blackhole that traffic instead of reporting the problem.
+				log.Fatalf("Failed to start UDP proxy server on %s: %v (free the port or pass a different --p-port)", proxyAddr, err)
+			}
+			log.Printf("UDP proxy server with PID %d listening on %s", os.Getpid(), udpConn.LocalAddr())
+			go ServeUDPProxy(udpConn, udpMap, mirror)
+		}
 	}
 }
 

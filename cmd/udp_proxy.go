@@ -43,20 +43,28 @@ type udpSession struct {
 	closeOnce  sync.Once
 }
 
-// StartUDPProxy listens on addr (UDP) and forwards packets to original destinations
-// looked up from the BPF map (key = client addr, value = original dst ip:port).
-func StartUDPProxy(addr string, udpMap *ebpf.Map, mirror *MirrorDispatcher) {
-	if udpMap == nil {
-		return
-	}
+// listenUDPProxy binds the UDP listener of the transparent proxy. It is kept
+// separate from serving so startup can report a bind failure instead of
+// silently leaving redirected UDP traffic without a forwarder.
+func listenUDPProxy(listenHost string, port uint16) (*net.UDPConn, error) {
+	addr := fmt.Sprintf("%s:%d", listenHost, port)
 	udpAddr, err := net.ResolveUDPAddr("udp4", addr)
 	if err != nil {
-		log.Printf("UDP proxy: resolve %s: %v", addr, err)
-		return
+		return nil, fmt.Errorf("resolve %s: %w", addr, err)
 	}
 	conn, err := net.ListenUDP("udp4", udpAddr)
 	if err != nil {
-		log.Printf("UDP proxy: listen %s: %v", addr, err)
+		return nil, err
+	}
+	return conn, nil
+}
+
+// ServeUDPProxy forwards packets read from conn to the original destinations
+// looked up from the BPF map (key = client addr, value = original dst ip:port).
+// conn is expected to be a bound listener from listenUDPProxy.
+func ServeUDPProxy(conn *net.UDPConn, udpMap *ebpf.Map, mirror *MirrorDispatcher) {
+	if udpMap == nil || conn == nil {
+		log.Printf("UDP proxy: nothing to serve (conn=%v map=%v)", conn != nil, udpMap != nil)
 		return
 	}
 	defer conn.Close()
